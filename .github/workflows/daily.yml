@@ -1,0 +1,22 @@
+name: daily-world
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 每天北京时间 08:00
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pillow
+      - run: python world.py
+      - run: |
+          git config user.name "tiny-planet-bot"
+          git config user.email "actions@github.com"
+          git add data
+          git commit -m "Day $(python -c 'import json;print(json.load(open(\"data/today.json\"))[\"day\"])')" || exit 0
+          git push
