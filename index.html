@@ -33,7 +33,7 @@ const base="https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/";
 fetch(base+"today.json?t="+Date.now()).then(r=>r.json()).then(d=>{
   document.title=d.world+" · 第"+d.day+"天";
   document.getElementById("title").textContent=d.world+" · 第 "+d.day+" 天";
-  document.getElementById("meta").textContent=d.date+" · "+d.season+" · "+d.weather;
+  document.getElementById("meta").textContent=d.date+" · "+(d.era||"")+" · "+d.season+" · "+d.weather;
   document.getElementById("planet").src=base+"planet.png?d="+d.day;
   const ul=document.getElementById("events");
   (d.events||[]).forEach(e=>{const li=document.createElement("li");
@@ -41,6 +41,7 @@ fetch(base+"today.json?t="+Date.now()).then(r=>r.json()).then(d=>{
     li.querySelector(".who").textContent=e.who;li.querySelector(".what").textContent=e.what;ul.appendChild(li);});
   const st=document.getElementById("stats");
   Object.entries(d.stats||{}).forEach(([k,v])=>{const s=document.createElement("span");s.textContent=k+" "+v;st.appendChild(s);});
+  (d.species||[]).forEach(x=>{const s=document.createElement("span");s.textContent=x.name+"（"+x.kind+"）"+x.pop;st.appendChild(s);});
 }).catch(()=>{document.getElementById("meta").textContent="数据加载失败，稍后再试";});
 </script>
 </body>
