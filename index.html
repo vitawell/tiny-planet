@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>豆星日报</title>
+<style>
+body{margin:0;font-family:-apple-system,"PingFang SC","Noto Sans SC",sans-serif;background:#0f1424;color:#eef1f8}
+main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{margin:0;font-size:28px}
+.meta{color:#9aa6c4;margin:6px 0 16px}
+img{width:100%;border-radius:14px;display:block;background:#1a2138}
+ul{list-style:none;padding:0;margin:18px 0}
+li{background:#18203a;border-radius:12px;padding:12px 14px;margin:10px 0;line-height:1.55}
+.who{font-weight:600}
+.stats{display:flex;flex-wrap:wrap;gap:8px}
+.stats span{background:#18203a;border-radius:999px;padding:4px 10px;font-size:13px;color:#c8d1ea}
+footer{margin-top:24px;font-size:12px;color:#6f7a99}
+a{color:#8fb4ff}
+</style>
+</head>
+<body>
+<main>
+<h1 id="title">豆星</h1>
+<div class="meta" id="meta">加载中…</div>
+<img id="planet" alt="今日星球全景">
+<ul id="events"></ul>
+<div class="stats" id="stats"></div>
+<footer>每天北京时间 08:00 自动推演新的一天 · <a href="https://github.com/vitawell/tiny-planet">GitHub</a></footer>
+</main>
+<script>
+const base="https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/";
+fetch(base+"today.json?t="+Date.now()).then(r=>r.json()).then(d=>{
+  document.title=d.world+" · 第"+d.day+"天";
+  document.getElementById("title").textContent=d.world+" · 第 "+d.day+" 天";
+  document.getElementById("meta").textContent=d.date+" · "+d.season+" · "+d.weather;
+  document.getElementById("planet").src=base+"planet.png?d="+d.day;
+  const ul=document.getElementById("events");
+  (d.events||[]).forEach(e=>{const li=document.createElement("li");
+    li.innerHTML=`${e.icon} <span class="who"></span>：<span class="what"></span>`;
+    li.querySelector(".who").textContent=e.who;li.querySelector(".what").textContent=e.what;ul.appendChild(li);});
+  const st=document.getElementById("stats");
+  Object.entries(d.stats||{}).forEach(([k,v])=>{const s=document.createElement("span");s.textContent=k+" "+v;st.appendChild(s);});
+}).catch(()=>{document.getElementById("meta").textContent="数据加载失败，稍后再试";});
+</script>
+</body>
+</html>
