@@ -1,15 +1,15 @@
 {
  "world": "豆星",
- "day": 1,
- "date": "2026-10-07",
+ "day": 2,
+ "date": "2026-10-08",
  "era": "熔岩纪",
  "season": "春",
  "weather": "岩浆风暴",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=1",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=2",
  "stats": {
-  "地表温度°C": 1056,
+  "地表温度°C": 929,
   "海洋%": 0,
-  "大气%": 8,
+  "大气%": 11,
   "有机物": 0,
   "氧气%": 0,
   "现存物种": 0,
@@ -20,7 +20,7 @@
   {
    "icon": "🔥",
    "who": "岩浆海",
-   "what": "整颗星球还在发红发烫，表面约 1056°C。"
+   "what": "整颗星球还在发红发烫，表面约 929°C。"
   },
   {
    "icon": "☄️",
@@ -30,7 +30,7 @@
   {
    "icon": "🌋",
    "who": "咕噜火山群",
-   "what": "同时冒烟，往天上吐出更多气体（大气浓度 8%）。"
+   "what": "同时冒烟，往天上吐出更多气体（大气浓度 11%）。"
   }
  ]
 }
