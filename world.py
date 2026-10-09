@@ -286,6 +286,11 @@ def draw_planet(s, season, path):
 
 def main():
     s = load()
+    bj_today = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")
+    if s.get("last_date") == bj_today and os.environ.get("FORCE") != "1":
+        print(f"今天（{bj_today}）已经推演过了，跳过。设置 FORCE=1 可强制推演。")
+        return
+    s["last_date"] = bj_today
     rng = random.Random(s["seed"] + s["day"] * 7919)
     season, ev = simulate(s, rng)
     date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
