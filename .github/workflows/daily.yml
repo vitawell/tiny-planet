@@ -1,7 +1,5 @@
 name: daily-world
 on:
-  schedule:
-    - cron: "0 0 * * *"   # 每天北京时间 08:00
   workflow_dispatch:
 permissions:
   contents: write
