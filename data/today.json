@@ -1,15 +1,15 @@
 {
  "world": "豆星",
- "day": 7,
- "date": "2026-10-12",
+ "day": 8,
+ "date": "2026-10-13",
  "era": "冷却纪",
  "season": "夏",
- "weather": "薄雾",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=7",
+ "weather": "多云",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=8",
  "stats": {
-  "地表温度°C": 500,
+  "地表温度°C": 443,
   "海洋%": 0,
-  "大气%": 24,
+  "大气%": 26,
   "有机物": 0,
   "氧气%": 0,
   "现存物种": 0,
@@ -20,17 +20,17 @@
   {
    "icon": "🪨",
    "who": "地壳",
-   "what": "一块块黑色岩壳浮上来又沉下去，表面降到 500°C。"
+   "what": "一块块黑色岩壳浮上来又沉下去，表面降到 443°C。"
   },
   {
    "icon": "☄️",
    "who": "陨石",
-   "what": "砸出一个新坑，溅起一圈火星。"
+   "what": "擦着地平线飞过，没落下来。"
   },
   {
    "icon": "🌋",
    "who": "咕噜火山群",
-   "what": "同时冒烟，往天上吐出更多气体（大气浓度 24%）。"
+   "what": "同时冒烟，往天上吐出更多气体（大气浓度 26%）。"
   }
  ]
 }
