@@ -14,6 +14,9 @@ ul{list-style:none;padding:0;margin:18px 0}
 li{background:#18203a;border-radius:12px;padding:12px 14px;margin:10px 0;line-height:1.55}
 .who{font-weight:600}
 .stats{display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-size:12px;color:#8fb4ff;background:#22305a;border-radius:6px;padding:1px 6px;margin-right:6px}
+.trend{color:#c8d1ea;font-size:14px;margin:12px 0 0}
+.more{color:#ffd27a;font-size:14px}
 .stats span{background:#18203a;border-radius:999px;padding:4px 10px;font-size:13px;color:#c8d1ea}
 footer{margin-top:24px;font-size:12px;color:#6f7a99}
 a{color:#8fb4ff}
@@ -24,20 +27,26 @@ a{color:#8fb4ff}
 <h1 id="title">豆星</h1>
 <div class="meta" id="meta">加载中…</div>
 <img id="planet" alt="今日星球全景">
+<div class="trend" id="trend"></div>
 <ul id="events"></ul>
+<div class="more" id="more"></div>
 <div class="stats" id="stats"></div>
-<footer>每天北京时间 08:00 自动推演新的一天 · <a href="https://github.com/vitawell/tiny-planet">GitHub</a></footer>
+<footer>每天北京时间 08:00 出一期：平淡时几天合成一期，热闹时一天拆成几期 · <a href="https://github.com/vitawell/tiny-planet">GitHub</a></footer>
 </main>
 <script>
 const base="https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/";
 fetch(base+"today.json?t="+Date.now()).then(r=>r.json()).then(d=>{
-  document.title=d.world+" · 第"+d.day+"天";
-  document.getElementById("title").textContent=d.world+" · 第 "+d.day+" 天";
+  const label=d.day_label||("第 "+d.day+" 天");
+  document.title=d.world+" · "+label;
+  document.getElementById("title").textContent=d.world+" · "+label;
+  const tr=Object.entries(d.trend||{});
+  if(tr.length) document.getElementById("trend").textContent="这几天："+tr.map(([k,v])=>k+" "+v).join("，");
+  if(d.more_tomorrow) document.getElementById("more").textContent="这一天发生的事太多，明天接着讲。";
   document.getElementById("meta").textContent=d.date+" · "+(d.era||"")+" · "+d.season+" · "+d.weather;
   document.getElementById("planet").src=base+"planet.png?d="+d.day;
   const ul=document.getElementById("events");
   (d.events||[]).forEach(e=>{const li=document.createElement("li");
-    li.innerHTML=`${e.icon} <span class="who"></span>：<span class="what"></span>`;
+    li.innerHTML=(e.tag?`<span class="tag">${e.tag}</span>`:"")+`${e.icon} <span class="who"></span>：<span class="what"></span>`;
     li.querySelector(".who").textContent=e.who;li.querySelector(".what").textContent=e.what;ul.appendChild(li);});
   const st=document.getElementById("stats");
   Object.entries(d.stats||{}).forEach(([k,v])=>{const s=document.createElement("span");s.textContent=k+" "+v;st.appendChild(s);});
