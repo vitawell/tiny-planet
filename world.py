@@ -284,30 +284,141 @@ def draw_planet(s, season, path):
     img.save(path, optimize=True)
 
 
+# ---------- 自适应日报：平淡时多天合并，热闹时一天拆成几期 ----------
+BUDGET = 8        # 一期日报的“变化分”预算
+MAX_DAYS = 5      # 平淡时一期最多合并的模拟天数
+MAX_BIG = 3       # 一期最多讲几件大事（里程碑/诞生/灭绝），多出来的留到下一期
+MAX_MILESTONE = 1 # 一期最多一个里程碑，让每个里程碑都有自己的一天
+PER_ISSUE = 6     # 一期最多展示的事件条数
+
+
+def classify(ev):
+    """事件重要性：3 里程碑，2 物种诞生/灭绝，1 日常"""
+    icon, who, text = ev
+    if text.startswith("【里程碑】"): return 3
+    if icon == "🪦" or "成了一个新物种" in text: return 2
+    return 1
+
+
+def day_score(before, after, ev):
+    sc = sum({3: 10, 2: 4, 1: 0}[classify(x)] for x in ev)
+    sc += min(3, abs(after["temp"] - before["temp"]) / 50)
+    sc += abs(after["ocean"] - before["ocean"]) / 5
+    sc += abs(after["organics"] - before["organics"]) / 10
+    sc += abs(after["oxygen"] - before["oxygen"]) / 2
+    return sc
+
+
+def merge_events(days):
+    """days: [(day, [ev...])] → 带 day/rank 的事件列表；日常事件按 (图标, 主角) 合并计数"""
+    out, routine = [], {}
+    for d, evs in days:
+        for ev in evs:
+            r = classify(ev)
+            if r >= 2:
+                out.append({"icon": ev[0], "who": ev[1], "what": ev[2], "day": d, "rank": r})
+            else:
+                k = (ev[0], ev[1] if ev[1] not in ("雨", "第一场雨") else "雨")
+                if k in routine:
+                    routine[k]["n"] += 1; routine[k]["what"] = ev[2]; routine[k]["day"] = d
+                else:
+                    routine[k] = {"icon": ev[0], "who": ev[1], "what": ev[2], "day": d, "rank": 1, "n": 1}
+    for x in routine.values():
+        n = x.pop("n")
+        if n > 1:
+            x["what"] += f"（{len(days)} 天里 {n} 次）"
+        out.append(x)
+    out.sort(key=lambda x: (-x["rank"], x["day"]))
+    return out
+
+
+def stats_of(s):
+    e = s["env"]
+    alive = [x for x in s["species"] if x["pop"] > 0]
+    return {"地表温度°C": e["temp"], "海洋%": e["ocean"], "大气%": e["air"], "有机物": e["organics"], "氧气%": e["oxygen"],
+            "现存物种": len(alive), "灭绝物种": s["extinct"]}
+
+
 def main():
     s = load()
-    bj_today = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")
+    bj = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
+    bj_today = bj.strftime("%Y-%m-%d")
     if s.get("last_date") == bj_today and os.environ.get("FORCE") != "1":
         print(f"今天（{bj_today}）已经推演过了，跳过。设置 FORCE=1 可强制推演。")
         return
     s["last_date"] = bj_today
-    rng = random.Random(s["seed"] + s["day"] * 7919)
-    season, ev = simulate(s, rng)
-    date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
-    draw_planet(s, season, os.path.join(DATA, "planet.png"))
+    s["issue"] = s.get("issue", s["day"]) + 1
+    backlog = s.get("backlog", [])
+    trend = {}
+
+    if backlog:
+        # 热闹期：上一期没讲完的事，这一期接着讲，世界不推进
+        part = s.get("backlog_part", 0) + 1
+        events, rest, nm = [], [], 0
+        for x in backlog:
+            if len(events) < MAX_BIG and (x["rank"] < 3 or nm < MAX_MILESTONE):
+                events.append(x); nm += x["rank"] == 3
+            else:
+                rest.append(x)
+        s["backlog"] = rest
+        s["backlog_part"] = part if s["backlog"] else 0
+        day_to = max(x["day"] for x in events)
+        day_from = min(x["day"] for x in events)
+        label = (f"第 {day_from} 天" if day_from == day_to else f"第 {day_from}–{day_to} 天") + f"（续 {part}）"
+        season = SEASONS[(s["day"] // 7) % 4]
+        sims = 0
+    else:
+        start = json.loads(json.dumps(s["env"])); start_stats = stats_of(s)
+        days, total = [], 0.0
+        while True:
+            snap = json.loads(json.dumps(s))
+            rng = random.Random(s["seed"] + s["day"] * 7919)
+            season_d, ev = simulate(s, rng)
+            sc = day_score(snap["env"], s["env"], ev)
+            if days and sc >= BUDGET:
+                s.clear(); s.update(snap)   # 大事发生的这一天留给下一期单独讲
+                break
+            season = season_d
+            days.append((s["day"], ev))
+            total += sc
+            if total >= BUDGET or len(days) >= MAX_DAYS:
+                break
+        sims = len(days)
+        merged = merge_events(days)
+        important = [x for x in merged if x["rank"] >= 2]
+        routine = [x for x in merged if x["rank"] == 1]
+        events, rest, nm = [], [], 0
+        for x in important:
+            if len(events) < MAX_BIG and (x["rank"] < 3 or nm < MAX_MILESTONE):
+                events.append(x); nm += x["rank"] == 3
+            else:
+                rest.append(x)
+        s["backlog"] = rest                         # 讲不完的大事留到之后几期
+        events += routine[:PER_ISSUE - len(events)]
+        s["backlog_part"] = 0
+        day_from, day_to = days[0][0], days[-1][0]
+        label = f"第 {day_to} 天" if day_from == day_to else f"第 {day_from}–{day_to} 天"
+        end_stats = stats_of(s)
+        trend = {k: f"{start_stats[k]}→{end_stats[k]}" for k in end_stats if start_stats[k] != end_stats[k]} if sims > 1 else {}
+        draw_planet(s, season, os.path.join(DATA, "planet.png"))
+
+    for x in events:
+        x.pop("rank", None)
+        if day_from != day_to: x["tag"] = f"第{x['day']}天"
     e = s["env"]
     alive = [x for x in s["species"] if x["pop"] > 0]
-    weather = "岩浆风暴" if e["temp"] > 600 else ("雨" if any(x[0] == "🌧️" for x in ev) else rng.choice(["晴", "多云", "大风", "薄雾"]))
+    wr = random.Random(s["seed"] + s["issue"])
+    weather = "岩浆风暴" if e["temp"] > 600 else ("雨" if any(x["icon"] == "🌧️" for x in events) else wr.choice(["晴", "多云", "大风", "薄雾"]))
     today = {
-        "world": s["world"], "day": s["day"], "date": date.strftime("%Y-%m-%d"),
-        "era": ERAS[s["era"]], "season": season, "weather": weather,
+        "world": s["world"], "day": s["day"], "day_from": day_from, "day_to": day_to, "day_label": label,
+        "issue": s["issue"], "sim_days": sims, "more_tomorrow": bool(s.get("backlog")),
+        "date": bj_today, "era": ERAS[s["era"]], "season": season, "weather": weather,
         "image": "https://raw.githubusercontent.com/{repo}/main/data/planet.png".format(repo=os.environ.get("GITHUB_REPOSITORY", "vitawell/tiny-planet")) + f"?d={s['day']}",
-        "stats": {"地表温度°C": e["temp"], "海洋%": e["ocean"], "大气%": e["air"], "有机物": e["organics"], "氧气%": e["oxygen"],
-                  "现存物种": len(alive), "灭绝物种": s["extinct"]},
+        "stats": stats_of(s), "trend": trend,
         "species": [{"name": x["name"], "kind": x["kind"], "pop": x["pop"]} for x in sorted(alive, key=lambda x: -x["pop"])[:8]],
-        "events": [{"icon": i, "who": w, "what": t} for i, w, t in ev],
+        "events": events,
     }
-    s["log"] = (s["log"] + [{"day": s["day"], "events": today["events"]}])[-30:]
+    s["log"] = (s["log"] + [{"day": s["day"], "label": label, "events": events}])[-30:]
     with open(STATE, "w", encoding="utf-8") as f: json.dump(s, f, ensure_ascii=False, indent=1)
     with open(os.path.join(DATA, "today.json"), "w", encoding="utf-8") as f: json.dump(today, f, ensure_ascii=False, indent=1)
     print(json.dumps(today, ensure_ascii=False, indent=1))
