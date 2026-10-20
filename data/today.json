@@ -1,36 +1,59 @@
 {
  "world": "豆星",
- "day": 14,
- "date": "2026-10-19",
+ "day": 19,
+ "day_from": 15,
+ "day_to": 19,
+ "day_label": "第 15–19 天",
+ "issue": 15,
+ "sim_days": 5,
+ "more_tomorrow": false,
+ "date": "2026-10-20",
  "era": "冷却纪",
  "season": "秋",
- "weather": "晴",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=14",
+ "weather": "大风",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=19",
  "stats": {
-  "地表温度°C": 208,
+  "地表温度°C": 118,
   "海洋%": 0,
-  "大气%": 41,
+  "大气%": 53,
   "有机物": 0,
   "氧气%": 0,
   "现存物种": 0,
   "灭绝物种": 0
  },
+ "trend": {
+  "地表温度°C": "208→118",
+  "大气%": "41→53"
+ },
  "species": [],
  "events": [
   {
-   "icon": "🪨",
-   "who": "地壳",
-   "what": "一块块黑色岩壳浮上来又沉下去，表面降到 208°C。"
-  },
-  {
    "icon": "☄️",
    "who": "陨石",
-   "what": "擦着地平线飞过，没落下来。"
+   "what": "砸出一个新坑，溅起一圈火星。（5 天里 3 次）",
+   "day": 18,
+   "tag": "第18天"
+  },
+  {
+   "icon": "🪨",
+   "who": "地壳",
+   "what": "一块块黑色岩壳浮上来又沉下去，表面降到 118°C。（5 天里 5 次）",
+   "day": 19,
+   "tag": "第19天"
   },
   {
    "icon": "🌋",
    "who": "咕噜火山群",
-   "what": "同时冒烟，往天上吐出更多气体（大气浓度 41%）。"
+   "what": "同时冒烟，往天上吐出更多气体（大气浓度 53%）。（5 天里 5 次）",
+   "day": 19,
+   "tag": "第19天"
+  },
+  {
+   "icon": "🌙",
+   "who": "小月亮",
+   "what": "盈凸月，静静看着下面。（5 天里 2 次）",
+   "day": 19,
+   "tag": "第19天"
   }
  ]
 }
