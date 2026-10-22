@@ -1,66 +1,58 @@
 {
  "world": "豆星",
- "day": 21,
- "day_from": 20,
- "day_to": 21,
- "day_label": "第 20–21 天",
- "issue": 16,
- "sim_days": 2,
+ "day": 22,
+ "day_from": 22,
+ "day_to": 22,
+ "day_label": "第 22 天",
+ "issue": 17,
+ "sim_days": 1,
  "more_tomorrow": false,
- "date": "2026-10-21",
- "era": "冷却纪",
+ "date": "2026-10-22",
+ "era": "雨海纪",
  "season": "冬",
- "weather": "大风",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=21",
+ "weather": "雨",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=22",
  "stats": {
-  "地表温度°C": 96,
-  "海洋%": 0,
-  "大气%": 58,
+  "地表温度°C": 84,
+  "海洋%": 5,
+  "大气%": 60,
   "有机物": 0,
   "氧气%": 0,
   "现存物种": 0,
   "灭绝物种": 0
  },
- "trend": {
-  "地表温度°C": "118→96",
-  "大气%": "53→58"
- },
+ "trend": {},
  "species": [],
  "events": [
   {
-   "icon": "🪨",
-   "who": "地壳",
-   "what": "一块块黑色岩壳浮上来又沉下去，表面降到 106°C。",
-   "day": 20,
-   "tag": "第20天"
+   "icon": "🌊",
+   "who": "原始海洋",
+   "what": "【里程碑】低洼处积起了第一汪海水。",
+   "day": 22
   },
   {
    "icon": "☄️",
    "who": "陨石",
-   "what": "砸出一个新坑，溅起一圈火星。",
-   "day": 20,
-   "tag": "第20天"
+   "what": "擦着地平线飞过，没落下来。",
+   "day": 22
   },
   {
    "icon": "🌋",
    "who": "咕噜火山群",
-   "what": "同时冒烟，往天上吐出更多气体（大气浓度 58%）。（2 天里 2 次）",
-   "day": 21,
-   "tag": "第21天"
+   "what": "同时冒烟，往天上吐出更多气体（大气浓度 60%）。",
+   "day": 22
   },
   {
-   "icon": "🌙",
-   "who": "小月亮",
-   "what": "亏凸月，静静看着下面。",
-   "day": 21,
-   "tag": "第21天"
+   "icon": "🌧️",
+   "who": "第一场雨",
+   "what": "落在发烫的岩石上，嘶嘶冒白气。",
+   "day": 22
   },
   {
-   "icon": "💨",
-   "who": "风",
-   "what": "卷起一阵灰尘，从一边的平原吹到另一边。",
-   "day": 21,
-   "tag": "第21天"
+   "icon": "⚡",
+   "who": "闪电",
+   "what": "照亮了光秃秃的山脊。",
+   "day": 22
   }
  ]
 }
