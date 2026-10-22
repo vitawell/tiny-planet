@@ -1,58 +1,75 @@
 {
  "world": "豆星",
- "day": 22,
- "day_from": 22,
- "day_to": 22,
- "day_label": "第 22 天",
- "issue": 17,
- "sim_days": 1,
+ "day": 27,
+ "day_from": 23,
+ "day_to": 27,
+ "day_label": "第 23–27 天",
+ "issue": 18,
+ "sim_days": 5,
  "more_tomorrow": false,
- "date": "2026-10-22",
+ "date": "2026-10-23",
  "era": "雨海纪",
  "season": "冬",
  "weather": "雨",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=22",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=27",
  "stats": {
-  "地表温度°C": 84,
-  "海洋%": 5,
-  "大气%": 60,
-  "有机物": 0,
+  "地表温度°C": 51,
+  "海洋%": 22,
+  "大气%": 73,
+  "有机物": 2,
   "氧气%": 0,
   "现存物种": 0,
   "灭绝物种": 0
  },
- "trend": {},
+ "trend": {
+  "地表温度°C": "84→51",
+  "海洋%": "5→22",
+  "大气%": "60→73",
+  "有机物": "0→2"
+ },
  "species": [],
  "events": [
   {
-   "icon": "🌊",
-   "who": "原始海洋",
-   "what": "【里程碑】低洼处积起了第一汪海水。",
-   "day": 22
+   "icon": "🌋",
+   "who": "咕噜火山群",
+   "what": "同时冒烟，往天上吐出更多气体（大气浓度 62%）。",
+   "day": 23,
+   "tag": "第23天"
+  },
+  {
+   "icon": "💨",
+   "who": "风",
+   "what": "卷起一阵灰尘，从一边的平原吹到另一边。",
+   "day": 25,
+   "tag": "第25天"
   },
   {
    "icon": "☄️",
    "who": "陨石",
-   "what": "擦着地平线飞过，没落下来。",
-   "day": 22
-  },
-  {
-   "icon": "🌋",
-   "who": "咕噜火山群",
-   "what": "同时冒烟，往天上吐出更多气体（大气浓度 60%）。",
-   "day": 22
+   "what": "砸出一个新坑，溅起一圈火星。（5 天里 3 次）",
+   "day": 26,
+   "tag": "第26天"
   },
   {
    "icon": "🌧️",
-   "who": "第一场雨",
-   "what": "落在发烫的岩石上，嘶嘶冒白气。",
-   "day": 22
+   "who": "雨",
+   "what": "下了一整天，海洋覆盖到 22%。（5 天里 4 次）",
+   "day": 27,
+   "tag": "第27天"
   },
   {
-   "icon": "⚡",
-   "who": "闪电",
-   "what": "照亮了光秃秃的山脊。",
-   "day": 22
+   "icon": "🌙",
+   "who": "小月亮",
+   "what": "盈凸月，静静看着下面。（5 天里 4 次）",
+   "day": 27,
+   "tag": "第27天"
+  },
+  {
+   "icon": "🌋",
+   "who": "咕噜火山",
+   "what": "打了个嗝，喷出一小股热气。（5 天里 2 次）",
+   "day": 27,
+   "tag": "第27天"
   }
  ]
 }
