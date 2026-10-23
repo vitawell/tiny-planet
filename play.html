@@ -30,7 +30,7 @@ canvas{display:block}
 <a id="back" href="index.html">← 日报</a>
 <div id="card"></div>
 <div id="toast"></div>
-<canvas id="map" width="240" height="240" style="position:fixed;right:10px;top:34px;width:110px;height:110px;border-radius:10px;border:2px solid rgba(255,255,255,.35);pointer-events:none"></canvas>
+<canvas id="map" width="240" height="240" style="position:fixed;right:10px;top:34px;width:130px;height:130px;border-radius:10px;border:2px solid rgba(255,255,255,.35);pointer-events:none"></canvas>
 <div id="flash"></div>
 <div id="heat"></div>
 <div id="joy"><div id="knob"></div></div>
@@ -77,7 +77,7 @@ if (!species.length) {
   if (top.kind === "植物") role.intro += "（植物走得很慢，这很正常）";
 }
 document.getElementById("st").textContent = `${d.world || "豆星"} · ${label}`;
-document.getElementById("sp").textContent = role.intro + `\n\n地图上有 ${events.length} 个发光的标记，走近就能看到当天的事件。`;
+document.getElementById("sp").textContent = role.intro + `\n\n右上角小地图上有 ${events.length} 个事件图标，走到那里就能看到当天发生了什么。`;
 document.getElementById("sp").style.whiteSpace = "pre-line";
 const goBtn = document.getElementById("go"); goBtn.style.display = "block";
 if (role.mode === "swim") { document.getElementById("up").textContent = "浮"; document.getElementById("down").style.display = "flex"; }
@@ -207,9 +207,9 @@ const markers = events.map((ev, i) => {
   x = Math.min(N - 2, Math.max(1, Math.round(x))); z = Math.min(N - 2, Math.max(1, Math.round(z))); placed.push([x, z]);
   const base = Math.max(H[x][z], role.mode === "swim" ? seaLevel - 1 : 0);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTex(ev.icon), depthTest: false, fog: false })); s.scale.set(1.4, 1.4, 1);
-  s.position.set(x + 0.5, base + 1.6, z + 0.5); scene.add(s);
+  s.position.set(x + 0.5, base + 1.6, z + 0.5);   // 只用于定位，主画面不显示
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.08, 6, 24), new THREE.MeshBasicMaterial({ color: 0xffe27a, fog: false }));
-  ring.rotation.x = Math.PI / 2; ring.position.set(x + 0.5, base + 0.15, z + 0.5); scene.add(ring);
+  ring.rotation.x = Math.PI / 2; ring.position.set(x + 0.5, base + 0.15, z + 0.5);
   return { ev, s, ring, found: false, y: s.position.y };
 });
 
@@ -263,7 +263,10 @@ const mapBase = document.createElement("canvas"); mapBase.width = mapBase.height
     g.fillStyle = (seaLevel && h <= seaLevel) ? "#2f86e0" : lavaCells.has(x + "," + z) ? "#ff6a1a" : Math.hypot(x - VX, z - VZ) < 8 ? "#2e2624" : Math.hypot(x - CX, z - CZ) < 3.4 ? "#3a3230" : `hsl(20,6%,${30 + h * 3}%)`;
     g.fillRect(x * K, z * K, K + 0.5, K + 0.5); } }
 function drawMap() { mg.drawImage(mapBase, 0, 0);
-  for (const m of markers) { mg.fillStyle = m.found ? "#7affb0" : "#ffe27a"; mg.beginPath(); mg.arc(m.s.position.x * K, m.s.position.z * K, 7, 0, 7); mg.fill(); }
+  mg.font = "30px serif"; mg.textAlign = "center"; mg.textBaseline = "middle";
+  for (const m of markers) { const x = m.s.position.x * K, z = m.s.position.z * K;
+    mg.globalAlpha = m.found ? 0.45 : 1; mg.fillStyle = m.found ? "#7affb0" : "#ffe27a"; mg.beginPath(); mg.arc(x, z, 17, 0, 7); mg.fill();
+    mg.fillText(m.ev.icon, x, z + 1); mg.globalAlpha = 1; }
   mg.save(); mg.translate(px * K, pz * K); mg.rotate(-yaw); mg.fillStyle = "#fff"; mg.beginPath(); mg.moveTo(0, -12); mg.lineTo(8, 9); mg.lineTo(-8, 9); mg.fill(); mg.restore(); }
 
 let started = false; goBtn.onclick = () => { document.getElementById("start").style.display = "none"; started = true; };
