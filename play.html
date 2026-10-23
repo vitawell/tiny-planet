@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>豆星 · 第一人称</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:-apple-system,"PingFang SC","Noto Sans SC",sans-serif;color:#eef1f8;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas{display:block}
+#hud{position:fixed;left:10px;top:10px;right:10px;pointer-events:none;font-size:13px;line-height:1.5;text-shadow:0 1px 3px #000}
+#hud b{font-size:15px}
+#card{position:fixed;left:50%;top:18%;transform:translateX(-50%);width:min(86vw,420px);background:rgba(20,28,52,.92);border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.55;display:none;pointer-events:none}
+#card .tag{font-size:12px;color:#8fb4ff}
+#toast{position:fixed;left:50%;bottom:170px;transform:translateX(-50%);background:rgba(0,0,0,.55);padding:6px 12px;border-radius:999px;font-size:13px;display:none;white-space:nowrap}
+#joy{position:fixed;left:24px;bottom:28px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.25)}
+#knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
+.btn{position:fixed;right:24px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:14px}
+#up{bottom:110px}#down{bottom:30px}
+#start{position:fixed;inset:0;background:rgba(10,14,30,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;gap:10px}
+#start h1{margin:0;font-size:24px}
+#start p{margin:0;max-width:420px;color:#c8d1ea;line-height:1.6}
+#go{margin-top:12px;background:#4b7bff;color:#fff;border:0;border-radius:999px;padding:12px 28px;font-size:16px}
+#back{position:fixed;right:10px;top:10px;color:#8fb4ff;font-size:13px;pointer-events:auto;text-decoration:none}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
+#heat{position:fixed;inset:0;background:radial-gradient(transparent 40%,rgba(255,60,0,.45));opacity:0;pointer-events:none;transition:opacity .3s}
+</style>
+</head>
+<body>
+<div id="hud"></div>
+<a id="back" href="index.html">← 日报</a>
+<div id="card"></div>
+<div id="toast"></div>
+<div id="flash"></div>
+<div id="heat"></div>
+<div id="joy"><div id="knob"></div></div>
+<div class="btn" id="up">跳</div>
+<div class="btn" id="down" style="display:none">潜</div>
+<div id="start"><h1 id="st">豆星</h1><p id="sp">加载中…</p><button id="go" style="display:none">出发</button></div>
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+const qs = new URLSearchParams(location.search);
+const DATA = qs.get("data") || "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/today.json";
+const d = await fetch(DATA + (DATA.includes("?") ? "&" : "?") + "t=" + Date.now()).then(r => r.json()).catch(() => null);
+if (!d) { document.getElementById("sp").textContent = "数据加载失败，稍后再试"; throw new Error("no data"); }
+
+const S = d.stats || {};
+const temp = S["地表温度°C"] ?? 20, ocean = S["海洋%"] ?? 0, air = S["大气%"] ?? 30, oxy = S["氧气%"] ?? 0;
+const events = d.events || [];
+const species = d.species || [];
+const label = d.day_label || ("第 " + d.day + " 天");
+const hasIcon = i => events.some(e => e.icon === i);
+const raining = hasIcon("🌧️") || d.weather === "雨";
+const kindsAlive = new Set(species.map(s => s.kind));
+
+// ---------- 角色：跟着当天的世界走 ----------
+const SEA = new Set(["微生物", "藻类", "软体", "鱼"]);
+let role;
+if (!species.length) {
+  role = { name: "小石人", kind: "石", mode: "walk", eye: 1.6, speed: 3.2, jump: 6, heatProof: true,
+    intro: `豆星上还没有生命。你是一个耐烫的小石人，在 ${temp}°C 的岩壳上替大家看看今天发生了什么。` };
+} else {
+  const top = species[0];
+  const sea = SEA.has(top.kind);
+  const tiny = top.kind === "微生物" || top.kind === "藻类";
+  role = { name: top.name, kind: top.kind, mode: sea ? "swim" : "walk",
+    eye: tiny ? 0.25 : top.kind === "虫" ? 0.35 : top.kind === "小兽" ? 0.7 : top.kind === "植物" ? 2.4 : sea ? 0.6 : 0.5,
+    speed: tiny ? 1.6 : top.kind === "鱼" ? 5 : top.kind === "小兽" ? 4.5 : top.kind === "植物" ? 0.6 : 2.5,
+    jump: top.kind === "小兽" ? 8 : top.kind === "虫" ? 4 : 0, heatProof: false,
+    intro: sea ? `你是 ${top.name}（${top.kind}），全星球数量最多的物种，约 ${top.pop}。只能待在水里，游去看看今天的事吧。`
+               : `你是 ${top.name}（${top.kind}），全星球数量最多的物种，约 ${top.pop}。在陆地上走走，看看今天的事。` };
+  if (top.kind === "植物") role.intro += "（植物走得很慢，这很正常）";
+}
+document.getElementById("st").textContent = `${d.world || "豆星"} · ${label}`;
+document.getElementById("sp").textContent = role.intro + `\n\n地图上有 ${events.length} 个发光的标记，走近就能看到当天的事件。`;
+document.getElementById("sp").style.whiteSpace = "pre-line";
+const goBtn = document.getElementById("go"); goBtn.style.display = "block";
+if (role.mode === "swim") { document.getElementById("up").textContent = "浮"; document.getElementById("down").style.display = "flex"; }
+else if (!role.jump) document.getElementById("up").style.display = "none";
+
+// ---------- 地形：固定种子，每天只变海面和颜色 ----------
+const N = 48;
+function hash(x, z) { let h = (x * 374761393 + z * 668265263 + 20261007) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function smooth(t) { return t * t * (3 - 2 * t); }
+function vnoise(x, z) { const xi = Math.floor(x), zi = Math.floor(z), xf = smooth(x - xi), zf = smooth(z - zi);
+  const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), e = hash(xi + 1, zi + 1);
+  return a + (b - a) * xf + (c - a) * zf + (a - b - c + e) * xf * zf; }
+const VX = 34, VZ = 14, CX = 12, CZ = 32; // 火山、陨石坑
+const H = [];
+for (let x = 0; x < N; x++) { H[x] = [];
+  for (let z = 0; z < N; z++) {
+    let h = 3 + vnoise(x / 9, z / 9) * 7 + vnoise(x / 4, z / 4) * 2.5;
+    const dx = x - N / 2, dz = z - N / 2; h -= Math.max(0, Math.hypot(dx, dz) - 18) * 0.6; // 边缘下沉成岛
+    const dv = Math.hypot(x - VX, z - VZ); if (dv < 7) h += (7 - dv) * 1.9; if (dv < 1.6) h -= 3; // 火山口
+    const dc = Math.hypot(x - CX, z - CZ); if (dc < 3.2) h -= (3.2 - dc) * 1.1; else if (dc < 4.2) h += 0.8;
+    H[x][z] = Math.max(1, Math.round(h));
+  } }
+const seaLevel = ocean <= 0 ? 0 : Math.round(1 + ocean / 70 * 7);
+const hot = Math.min(1, Math.max(0, (temp - 40) / 400));
+const C = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t);
+const green = kindsAlive.has("苔藓") || kindsAlive.has("植物");
+function topColor(x, z, h) {
+  if (Math.hypot(x - VX, z - VZ) < 1.6) return new THREE.Color(0xff5a1f);
+  if (hot > 0.15 && hash(x * 3, z * 7) < hot * 0.35) return C(0x5a4a44, 0xff6a20, hot); // 岩浆裂缝
+  if (seaLevel && h <= seaLevel + 1) return C(0xb8a77a, 0x6b5f58, hot);                  // 海边砂
+  if (green && h < 9 && hash(x, z * 5) < 0.75) return new THREE.Color(kindsAlive.has("植物") ? 0x3f9a4a : 0x77b35a);
+  return C(0x7d7570, 0x4a3d3a, hot).offsetHSL(0, 0, (hash(x, z) - 0.5) * 0.06);
+}
+const lavaCells = new Set();
+const blocks = [];
+for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
+  const h = H[x][z];
+  let minN = h; for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nh = (H[x + a] || [])[z + b] ?? 0; minN = Math.min(minN, nh); }
+  const tc = topColor(x, z, h);
+  if (tc.r > 0.9 && tc.g < 0.6) lavaCells.add(x + "," + z);
+  blocks.push([x, h - 1, z, tc]);
+  const side = C(0x6a625e, 0x3b302d, hot);
+  for (let y = Math.max(0, minN - 1); y < h - 1; y++) blocks.push([x, y, z, side.clone().offsetHSL(0, 0, -0.03 * ((h - y) % 3))]);
+}
+// 墓碑、植物、石块装饰
+const deco = [];
+if (events.some(e => e.icon === "🪦")) deco.push([20, 20, 0x9a9aa6, 0.6, 1.0, 0.25]);
+if (kindsAlive.has("植物")) for (let i = 0; i < 40; i++) { const x = 4 + Math.floor(hash(i, 99) * 40), z = 4 + Math.floor(hash(99, i) * 40); if (H[x][z] > seaLevel + 1) { deco.push([x, z, 0x2f7d45, 0.9, 1.6, 0.9, 1.6]); } }
+
+// ---------- 场景 ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const sky = C(0x8fb4ff, 0xd07a50, Math.max(hot, 1 - oxy / 25 > 0 ? 0.35 * (1 - oxy / 25) : 0)).lerp(new THREE.Color(0x777f8c), raining ? 0.5 : 0);
+scene.background = sky; scene.fog = new THREE.Fog(sky, 10, 18 + (100 - air) * 0.25);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 200);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(20, 40, 10); scene.add(sun);
+const box = new THREE.BoxGeometry(1, 1, 1);
+const inst = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial(), blocks.length);
+const m4 = new THREE.Matrix4();
+blocks.forEach(([x, y, z, c], i) => { m4.makeTranslation(x + 0.5, y + 0.5, z + 0.5); inst.setMatrixAt(i, m4); inst.setColorAt(i, c); });
+scene.add(inst);
+for (const [x, z, col, w, h, wd, y0] of deco) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, wd), new THREE.MeshLambertMaterial({ color: col }));
+  m.position.set(x + 0.5, H[x][z] + h / 2 + (y0 ? 0.6 : 0), z + 0.5); scene.add(m);
+  if (y0) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), new THREE.MeshLambertMaterial({ color: 0x6b4a33 })); t.position.set(x + 0.5, H[x][z] + 0.4, z + 0.5); scene.add(t); }
+}
+if (seaLevel) {
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(N * 3, N * 3), new THREE.MeshLambertMaterial({ color: kindsAlive.has("藻类") ? 0x3aa58c : 0x3a7fd0, transparent: true, opacity: 0.72, side: THREE.DoubleSide }));
+  water.rotation.x = -Math.PI / 2; water.position.set(N / 2, seaLevel + 0.85, N / 2); scene.add(water);
+}
+// 月亮
+const moon = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 12), new THREE.MeshBasicMaterial({ color: 0xf5ecc8, fog: false }));
+moon.position.set(-30, 45, -40); scene.add(moon);
+
+// 粒子工具
+function particles(n, color, size) {
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.8 })); scene.add(p); return p;
+}
+const smoke = particles(160, 0xcfcfd4, 0.5), smokeState = [];
+for (let i = 0; i < 160; i++) smokeState.push({ t: Math.random() * 6 });
+let rain = null; if (raining) { rain = particles(1500, 0xc8dcff, 0.08); const a = rain.geometry.attributes.position.array; for (let i = 0; i < a.length; i += 3) { a[i] = Math.random() * N; a[i + 1] = Math.random() * 25; a[i + 2] = Math.random() * N; } }
+const steam = (raining && temp > 60) ? particles(300, 0xffffff, 0.35) : null, steamState = [];
+if (steam) for (let i = 0; i < 300; i++) steamState.push({ x: Math.random() * N, z: Math.random() * N, t: Math.random() * 3 });
+let meteor = null, meteorT = 3;
+if (hasIcon("☄️")) { meteor = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffd27a })); scene.add(meteor); }
+let boltLine = null, boltT = 4;
+if (hasIcon("⚡")) { boltLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 8 }, () => new THREE.Vector3())), new THREE.LineBasicMaterial({ color: 0xfff7c0 })); boltLine.visible = false; scene.add(boltLine); }
+
+// ---------- 事件标记 ----------
+function spot(ev, i) {
+  const sp = species.find(s => s.name === ev.who);
+  const pick = (k) => { for (let j = 0; j < 400; j++) { const x = 3 + Math.floor(hash(i * 31 + j, k) * (N - 6)), z = 3 + Math.floor(hash(k, i * 17 + j) * (N - 6));
+      const wet = seaLevel && H[x][z] <= seaLevel; if ((role.mode === "swim") === !!wet || (!seaLevel)) return [x, z]; } return [N / 2, N / 2]; };
+  if (ev.icon === "🌋") return [VX + 2, VZ + 2];
+  if (ev.icon === "☄️") return [CX, CZ];
+  if (ev.icon === "🪦") return [20, 20];
+  if (sp && role.mode === "swim") return pick(5);
+  return pick(ev.icon.codePointAt(0) % 97);
+}
+function emojiTex(t) { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  g.font = "96px serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(t, 64, 70); return new THREE.CanvasTexture(c); }
+const placed = [];
+const markers = events.map((ev, i) => {
+  let [x, z] = spot(ev, i);
+  for (let k = 0; k < 6 && placed.some(([a, b]) => Math.hypot(a - x, b - z) < 3); k++) { x += 3; z -= 1; }   // 同类事件别叠在一起
+  x = Math.min(N - 2, Math.max(1, Math.round(x))); z = Math.min(N - 2, Math.max(1, Math.round(z))); placed.push([x, z]);
+  const base = Math.max(H[x][z], role.mode === "swim" ? seaLevel - 1 : 0);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTex(ev.icon), depthTest: false, fog: false })); s.scale.set(1.4, 1.4, 1);
+  s.position.set(x + 0.5, base + 1.6, z + 0.5); scene.add(s);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.08, 6, 24), new THREE.MeshBasicMaterial({ color: 0xffe27a, fog: false }));
+  ring.rotation.x = Math.PI / 2; ring.position.set(x + 0.5, base + 0.15, z + 0.5); scene.add(ring);
+  return { ev, s, ring, found: false, y: s.position.y };
+});
+
+// ---------- 玩家 ----------
+function ground(x, z) { const xi = Math.floor(x), zi = Math.floor(z); return (H[xi] && H[xi][zi] != null) ? H[xi][zi] : 0; }
+function isWater(x, z) { return seaLevel && ground(x, z) <= seaLevel; }
+let px, pz;
+{ // 出生点：游泳的生在水里，走路的生在陆地
+  let best = null; for (let j = 0; j < 2000 && !best; j++) { const x = 6 + hash(j, 7) * (N - 12), z = 6 + hash(7, j) * (N - 12);
+    if (role.mode === "swim" ? isWater(x, z) : (!isWater(x, z) && !lavaCells.has(Math.floor(x) + "," + Math.floor(z)))) best = [x, z]; }
+  if (!best && role.mode === "swim") role.mode = "walk";
+  [px, pz] = best || [N / 2, N / 2];
+}
+let py = role.mode === "swim" ? seaLevel + 0.2 : ground(px, pz), vy = 0, yaw = Math.PI * 0.25, pitch = -0.1;
+const keys = {}; addEventListener("keydown", e => keys[e.code] = true); addEventListener("keyup", e => keys[e.code] = false);
+let jx = 0, jz = 0, upHeld = false, downHeld = false;
+const joy = document.getElementById("joy"), knob = document.getElementById("knob");
+let joyId = null, lookId = null, lx = 0, ly = 0;
+function joyMove(t) { const r = joy.getBoundingClientRect(); let dx = t.clientX - r.left - 60, dy = t.clientY - r.top - 60; const l = Math.hypot(dx, dy); if (l > 45) { dx *= 45 / l; dy *= 45 / l; }
+  knob.style.left = 35 + dx + "px"; knob.style.top = 35 + dy + "px"; jx = dx / 45; jz = dy / 45; }
+addEventListener("touchstart", e => { for (const t of e.changedTouches) {
+  const el = document.elementFromPoint(t.clientX, t.clientY);
+  if (el && (el.id === "joy" || el.id === "knob")) { joyId = t.identifier; joyMove(t); }
+  else if (el && el.id === "up") upHeld = true; else if (el && el.id === "down") downHeld = true;
+  else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; } } }, { passive: true });
+addEventListener("touchmove", e => { for (const t of e.changedTouches) {
+  if (t.identifier === joyId) joyMove(t);
+  else if (t.identifier === lookId) { yaw -= (t.clientX - lx) * 0.006; pitch = Math.max(-1.4, Math.min(1.4, pitch - (t.clientY - ly) * 0.006)); lx = t.clientX; ly = t.clientY; } } }, { passive: true });
+addEventListener("touchend", e => { for (const t of e.changedTouches) {
+  if (t.identifier === joyId) { joyId = null; jx = jz = 0; knob.style.left = knob.style.top = "35px"; }
+  if (t.identifier === lookId) lookId = null; }
+  if (![...e.touches].some(t => { const el = document.elementFromPoint(t.clientX, t.clientY); return el && el.id === "up"; })) upHeld = false;
+  if (![...e.touches].some(t => { const el = document.elementFromPoint(t.clientX, t.clientY); return el && el.id === "down"; })) downHeld = false; });
+let mdown = false; renderer.domElement.addEventListener("mousedown", e => { mdown = true; lx = e.clientX; ly = e.clientY; });
+addEventListener("mouseup", () => mdown = false);
+addEventListener("mousemove", e => { if (!mdown) return; yaw -= (e.clientX - lx) * 0.005; pitch = Math.max(-1.4, Math.min(1.4, pitch - (e.clientY - ly) * 0.005)); lx = e.clientX; ly = e.clientY; });
+for (const id of ["up", "down"]) { const b = document.getElementById(id); b.onmousedown = () => id === "up" ? upHeld = true : downHeld = true; b.onmouseup = b.onmouseleave = () => id === "up" ? upHeld = false : downHeld = false; }
+
+const hud = document.getElementById("hud"), card = document.getElementById("card"), toast = document.getElementById("toast");
+const flash = document.getElementById("flash"), heat = document.getElementById("heat");
+let toastT = 0; function say(t) { toast.textContent = t; toast.style.display = "block"; toastT = 2.2; }
+function updHud() { const n = markers.filter(m => m.found).length;
+  hud.innerHTML = `<b>${d.world || "豆星"} · ${label}</b><br>${d.era || ""} · ${d.weather || ""} · ${temp}°C<br>你是：${role.name}（${role.kind}）<br>已发现事件 ${n}/${markers.length}` +
+    (n === markers.length && n ? "<br>✨ 今天的豆星逛完了" : ""); }
+updHud();
+
+let started = false; goBtn.onclick = () => { document.getElementById("start").style.display = "none"; started = true; };
+addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+const clock = new THREE.Clock(); let tAll = 0;
+function step(dt) {
+  tAll += dt;
+  // 移动
+  let fx = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - jz;
+  let sx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + jx;
+  const up = upHeld || keys.Space, down = downHeld || keys.ShiftLeft;
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  let sp = role.speed; const wet = isWater(px, pz) && py < seaLevel + 0.9;
+  if (role.mode === "walk" && wet) sp *= 0.5;
+  if (raining && role.mode === "walk") sp *= 0.9;
+  const mv = fwd.multiplyScalar(fx).add(right.multiplyScalar(sx)); if (mv.length() > 1) mv.normalize();
+  let nx = px + mv.x * sp * dt, nz = pz + mv.z * sp * dt;
+  nx = Math.min(N - 0.5, Math.max(0.5, nx)); nz = Math.min(N - 0.5, Math.max(0.5, nz));
+  if (role.mode === "swim") {
+    if (!isWater(nx, nz)) { if (Math.random() < 0.02) say("这里是陆地，你只能在水里游"); }
+    else { px = nx; pz = nz; }
+    vy = (up ? 1.6 : 0) - (down ? 1.6 : 0) + Math.sin(tAll * 2) * 0.05; py += vy * dt;
+    const g = ground(px, pz); py = Math.max(g + 0.05, Math.min(seaLevel + 0.55, py));
+  } else {
+    const g1 = ground(nx, nz);
+    if (g1 <= py + 1.01) { px = nx; pz = nz; if (g1 > py) py = g1; }   // 一格台阶自动迈上去
+    else if (role.jump) say("太高了，跳上去"); else say("这里太高，绕过去吧");
+    const g = ground(px, pz);
+    if (py <= g + 0.01 && up && role.jump) vy = role.jump;
+    vy -= 20 * dt; py += vy * dt; if (py < g) { py = g; vy = 0; }
+    if (role.kind === "小兽" && py <= g + 0.01 && mv.length() > 0.2) vy = 3.5; // 蹦着走
+  }
+  const onLava = lavaCells.has(Math.floor(px) + "," + Math.floor(pz)) && py < ground(px, pz) + 0.2;
+  heat.style.opacity = onLava ? (role.heatProof ? 0.35 : 0.8) : (hot > 0.3 && role.mode === "walk" ? hot * 0.25 : 0);
+  if (onLava && !role.heatProof) say("太烫了！快离开岩浆");
+  const bob = (role.mode === "walk" && mv.length() > 0.1 && py <= ground(px, pz) + 0.01) ? Math.sin(tAll * 10) * 0.04 : 0;
+  camera.position.set(px, py + role.eye + bob, pz);
+  camera.rotation.set(pitch, yaw, 0, "YXZ");
+  // 标记
+  let near = null;
+  for (const m of markers) {
+    m.s.position.y = m.y + Math.sin(tAll * 2 + m.y) * 0.15; m.ring.rotation.z += dt;
+    const dist = Math.hypot(m.s.position.x - px, m.s.position.z - pz);
+    if (dist < 2.6) { near = m; if (!m.found) { m.found = true; m.ring.material.color.set(0x7affb0); updHud(); } }
+  }
+  if (near) { card.style.display = "block"; card.innerHTML = (near.ev.tag ? `<div class="tag">${near.ev.tag}</div>` : "") + `${near.ev.icon} <b></b>：<span></span>`;
+    card.querySelector("b").textContent = near.ev.who; card.querySelector("span").textContent = near.ev.what; }
+  else card.style.display = "none";
+  // 火山烟
+  { const a = smoke.geometry.attributes.position.array; const vol = hasIcon("🌋") ? 1 : 0.35;
+    smokeState.forEach((s, i) => { s.t += dt * vol; if (s.t > 6) s.t = 0; const r = s.t * 0.5;
+      a[i * 3] = VX + 0.5 + Math.sin(i * 1.7 + tAll * 0.3) * r; a[i * 3 + 1] = H[VX][VZ] + 1 + s.t * 2.2; a[i * 3 + 2] = VZ + 0.5 + Math.cos(i * 2.3) * r; });
+    smoke.geometry.attributes.position.needsUpdate = true; }
+  if (rain) { const a = rain.geometry.attributes.position.array; for (let i = 0; i < a.length; i += 3) { a[i + 1] -= 18 * dt; if (a[i + 1] < 0) { a[i] = px + (Math.random() - 0.5) * 30; a[i + 1] = 20; a[i + 2] = pz + (Math.random() - 0.5) * 30; } } rain.geometry.attributes.position.needsUpdate = true; }
+  if (steam) { const a = steam.geometry.attributes.position.array; steamState.forEach((s, i) => { s.t += dt; if (s.t > 3) { s.t = 0; s.x = px + (Math.random() - 0.5) * 24; s.z = pz + (Math.random() - 0.5) * 24; }
+      const xx = Math.min(N - 1, Math.max(0, s.x)), zz = Math.min(N - 1, Math.max(0, s.z)); a[i * 3] = s.x; a[i * 3 + 1] = ground(xx, zz) + s.t * 0.8; a[i * 3 + 2] = s.z; }); steam.geometry.attributes.position.needsUpdate = true; }
+  if (meteor) { meteorT -= dt; const k = Math.max(0, meteorT) / 3;
+    meteor.position.set(CX + 0.5 + k * 30, H[CX][CZ] + k * 40, CZ + 0.5 - k * 20);
+    if (meteorT < -0.3) { meteorT = 9 + Math.random() * 6; if (Math.hypot(px - CX, pz - CZ) < 14) { flash.style.opacity = 0.35; say("☄️ 轰！一块陨石落进了坑里"); } } }
+  if (boltLine) { boltT -= dt; if (boltT < 0) { boltT = 5 + Math.random() * 6; const bx = px + (Math.random() - 0.5) * 20, bz = pz + (Math.random() - 0.5) * 20;
+      const pts = []; for (let i = 0; i < 8; i++) pts.push(new THREE.Vector3(bx + (Math.random() - 0.5) * 1.5, 30 - i * (30 - Math.max(seaLevel, 1)) / 7, bz + (Math.random() - 0.5) * 1.5));
+      boltLine.geometry.setFromPoints(pts); boltLine.visible = true; flash.style.opacity = 0.6; }
+    if (boltT < 4.8) boltLine.visible = false; }
+  flash.style.opacity = Math.max(0, (+flash.style.opacity || 0) - dt * 2);
+  if (toastT > 0) { toastT -= dt; if (toastT <= 0) toast.style.display = "none"; }
+}
+function loop() { const dt = Math.min(0.05, clock.getDelta()); if (started) step(dt); else { camera.position.set(px, py + role.eye + 6, pz + 6); camera.lookAt(px, py, pz); }
+  renderer.render(scene, camera); requestAnimationFrame(loop); }
+loop();
+</script>
+</body>
+</html>
