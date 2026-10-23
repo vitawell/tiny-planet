@@ -36,6 +36,10 @@ canvas{display:block}
 <div class="btn" id="up">跳</div>
 <div class="btn" id="down" style="display:none">潜</div>
 <div id="start"><h1 id="st">豆星</h1><p id="sp">加载中…</p><button id="go" style="display:none">出发</button></div>
+<script>
+addEventListener("error",e=>{const p=document.getElementById("sp");if(p)p.textContent+="\n\n出错了："+(e.message||e);});
+addEventListener("unhandledrejection",e=>{const p=document.getElementById("sp");if(p)p.textContent+="\n\n出错了："+(e.reason&&e.reason.message||e.reason);});
+</script>
 <script type="module">
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
@@ -123,7 +127,9 @@ if (events.some(e => e.icon === "🪦")) deco.push([20, 20, 0x9a9aa6, 0.6, 1.0, 
 if (kindsAlive.has("植物")) for (let i = 0; i < 40; i++) { const x = 4 + Math.floor(hash(i, 99) * 40), z = 4 + Math.floor(hash(99, i) * 40); if (H[x][z] > seaLevel + 1) { deco.push([x, z, 0x2f7d45, 0.9, 1.6, 0.9, 1.6]); } }
 
 // ---------- 场景 ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+catch (err) { document.getElementById("sp").textContent = "这个浏览器打不开 3D（WebGL 不可用），换个浏览器或打开硬件加速再试。"; goBtn.style.display = "none"; throw err; }
 renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
 document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
