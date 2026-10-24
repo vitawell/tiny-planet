@@ -38,7 +38,7 @@ def init_state():
     return {
         "world": "豆星", "day": 0, "seed": 20261007, "era": 0,
         "env": {"temp": 1200, "ocean": 0, "air": 5, "organics": 0, "oxygen": 0, "volcano": 80, "moon": 0},
-        "species": [], "extinct": 0, "milestones": [], "log": [],
+        "species": [], "extinct": 0, "milestones": [], "log": [], "proto_cells": 0,
     }
 
 
@@ -61,7 +61,8 @@ def new_name(rng, kind, used):
 
 def add_species(s, rng, kind, pop, parent=None):
     used = {x["name"] for x in s["species"]}
-    sp = {"name": new_name(rng, kind, used), "kind": kind, "pop": pop, "born": s["day"], "parent": parent}
+    base_traits = {"耐热": rng.random(), "耐旱": rng.random(), "繁殖": rng.random(), "移动": rng.random()}
+    sp = {"name": new_name(rng, kind, used), "kind": kind, "pop": pop, "born": s["day"], "parent": parent, "traits": base_traits}
     s["species"].append(sp)
     return sp
 
@@ -99,6 +100,10 @@ def simulate(s, rng):
     lightning = raining and rng.random() < 0.5
     if e["ocean"] > 20:
         e["organics"] = clamp(e["organics"] + (3 if lightning else 1) + (1 if e["volcano"] > 20 else 0), 0, 100)
+    # 原始膜：让生命起源经历可观察的中间阶段，而非突然出现
+    if e["organics"] >= 25 and s.get("proto_cells", 0) == 0:
+        s["proto_cells"] = 1
+        ev.append(("🫧", "原始膜", "一些有机分子开始把自己包起来，像是不太稳定的细胞。"))
 
     if e["temp"] > 600:
         ev.append(("🔥", "岩浆海", f"整颗星球还在发红发烫，表面约 {e['temp']}°C。"))
@@ -106,7 +111,14 @@ def simulate(s, rng):
         ev.append(("🪨", "地壳", f"一块块黑色岩壳浮上来又沉下去，表面降到 {e['temp']}°C。"))
     if rng.random() < (0.5 if d < 30 else 0.12):
         ev.append(("☄️", "陨石", rng.choice(["砸出一个新坑，溅起一圈火星。", "带来一点点冰，蒸发成了雾。", "掉进海里，激起一阵大浪。" if e["ocean"] > 10 else "擦着地平线飞过，没落下来。"])))
-    if e["volcano"] > 50:
+    if e["volcano"] > 70 and rng.random() < 0.18:
+        # 灾难会改变后续生态，而不仅仅是新闻
+        shock = rng.randint(5, 15)
+        e["temp"] = clamp(e["temp"] + shock, 5, 1200)
+        e["ocean"] = clamp(e["ocean"] - rng.randint(1, 4), 0, 70)
+        e["oxygen"] = clamp(round(e["oxygen"] - 2, 2), 0, 60)
+        ev.append(("🌋", "大喷发", f"火山群同时爆发：温度升高，海洋退去一角，氧气下降。"))
+    elif e["volcano"] > 50:
         ev.append(("🌋", "咕噜火山群", f"同时冒烟，往天上吐出更多气体（大气浓度 {e['air']}%）。"))
     elif rng.random() < 0.25:
         ev.append(("🌋", "咕噜火山", "打了个嗝，喷出一小股热气。"))
@@ -119,7 +131,7 @@ def simulate(s, rng):
     if e["temp"] < 600: milestone(s, "crust", ev, "🪨", "地壳", "岩浆海凝固出第一片稳定的地壳。") and s.update(era=max(s["era"], 1))
     if e["ocean"] >= 3: milestone(s, "sea", ev, "🌊", "原始海洋", "低洼处积起了第一汪海水。") and s.update(era=max(s["era"], 2))
     if e["organics"] >= 20: milestone(s, "soup", ev, "🫧", "浅海", "有机分子越来越浓，海水变成了一锅“原始汤”。") and s.update(era=max(s["era"], 3))
-    if e["organics"] >= 40 and not has(s, "微生物") and rng.random() < 0.08:
+    if e["organics"] >= 40 and s.get("proto_cells", 0) and not has(s, "微生物") and rng.random() < 0.18:
         sp = add_species(s, rng, "微生物", 10)
         milestone(s, "life", ev, "🦠", sp["name"], "在火山热泉边，第一个会自我复制的小泡泡出现了。豆星有生命了。")
         s["era"] = max(s["era"], 4)
@@ -161,7 +173,11 @@ def simulate(s, rng):
         icon, hab, r, k = KINDS[sp["kind"]]
         cap = max(5, (cap_sea if hab == "海" else cap_land) * k)
         n = sp["pop"]
-        n = n + r * n * (1 - n / cap) + rng.gauss(0, n * 0.05)
+        tr = sp.get("traits", {})
+        fit = 0.75 + 0.5 * (tr.get("耐热", 0.5) if e["temp"] > 50 else 1 - tr.get("耐热", 0.5))
+        fit *= 0.75 + 0.5 * (tr.get("耐旱", 0.5) if e["ocean"] < 20 else 1 - tr.get("耐旱", 0.5))
+        growth = r * (0.7 + tr.get("繁殖", 0.5) * 0.6) * fit
+        n = n + growth * n * (1 - n / cap) + rng.gauss(0, n * 0.05)
         sp["pop"] = max(0, int(n))
         if sp["pop"] == 0:
             s["extinct"] += 1
@@ -176,6 +192,9 @@ def simulate(s, rng):
         half = par["pop"] // 4
         par["pop"] -= half
         sp = add_species(s, rng, par["kind"], half, par["name"])
+        # 子代继承母体性状，并发生小幅变异；自然选择由环境适配度体现
+        pt = par.get("traits", {})
+        sp["traits"] = {k: clamp(v + rng.gauss(0, 0.12), 0, 1) for k, v in pt.items()}
         ev.append((KINDS[sp["kind"]][0], sp["name"], f"从{par['name']}里分化出来，成了一个新物种。"))
 
     # 日常生物事件
