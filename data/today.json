@@ -1,68 +1,52 @@
 {
  "world": "豆星",
- "day": 32,
- "day_from": 28,
- "day_to": 32,
- "day_label": "第 28–32 天",
- "issue": 19,
- "sim_days": 5,
+ "day": 33,
+ "day_from": 33,
+ "day_to": 33,
+ "day_label": "第 33 天",
+ "issue": 20,
+ "sim_days": 1,
  "more_tomorrow": false,
- "date": "2026-10-24",
- "era": "雨海纪",
+ "date": "2026-10-25",
+ "era": "原始汤纪",
  "season": "春",
  "weather": "雨",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=32",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=33",
  "stats": {
-  "地表温度°C": 38,
-  "海洋%": 39,
-  "大气%": 85,
-  "有机物": 16,
+  "地表温度°C": 37,
+  "海洋%": 41,
+  "大气%": 88,
+  "有机物": 20,
   "氧气%": 0,
   "现存物种": 0,
   "灭绝物种": 0
  },
- "trend": {
-  "地表温度°C": "51→38",
-  "海洋%": "22→39",
-  "大气%": "73→85",
-  "有机物": "2→16"
- },
+ "trend": {},
  "species": [],
  "events": [
   {
-   "icon": "⚡",
-   "who": "闪电",
-   "what": "劈进浅海，水里多了一些奇怪的小分子。（5 天里 2 次）",
-   "day": 30,
-   "tag": "第30天"
+   "icon": "🫧",
+   "who": "浅海",
+   "what": "【里程碑】有机分子越来越浓，海水变成了一锅“原始汤”。",
+   "day": 33
   },
   {
-   "icon": "💨",
-   "who": "风",
-   "what": "卷起一阵灰尘，从一边的平原吹到另一边。（5 天里 2 次）",
-   "day": 31,
-   "tag": "第31天"
+   "icon": "🌋",
+   "who": "咕噜火山",
+   "what": "打了个嗝，喷出一小股热气。",
+   "day": 33
   },
   {
    "icon": "🌧️",
    "who": "雨",
-   "what": "下了一整天，海洋覆盖到 39%。（5 天里 4 次）",
-   "day": 32,
-   "tag": "第32天"
+   "what": "下了一整天，海洋覆盖到 41%。",
+   "day": 33
   },
   {
-   "icon": "🌙",
-   "who": "小月亮",
-   "what": "新月，静静看着下面。（5 天里 4 次）",
-   "day": 32,
-   "tag": "第32天"
-  },
-  {
-   "icon": "☄️",
-   "who": "陨石",
-   "what": "砸出一个新坑，溅起一圈火星。（5 天里 2 次）",
-   "day": 32,
-   "tag": "第32天"
+   "icon": "⚡",
+   "who": "闪电",
+   "what": "劈进浅海，水里多了一些奇怪的小分子。",
+   "day": 33
   }
  ]
 }
