@@ -1,22 +1,23 @@
 {
  "world": "豆星",
- "day": 32,
+ "day": 33,
  "seed": 20261007,
- "era": 2,
+ "era": 3,
  "env": {
-  "temp": 38,
-  "ocean": 39,
-  "air": 85,
-  "organics": 16,
+  "temp": 37,
+  "ocean": 41,
+  "air": 88,
+  "organics": 20,
   "oxygen": 0,
-  "volcano": 37,
-  "moon": 0
+  "volcano": 35,
+  "moon": 1
  },
  "species": [],
  "extinct": 0,
  "milestones": [
   "crust",
-  "sea"
+  "sea",
+  "soup"
  ],
  "log": [
   {
@@ -503,10 +504,40 @@
      "tag": "第32天"
     }
    ]
+  },
+  {
+   "day": 33,
+   "label": "第 33 天",
+   "events": [
+    {
+     "icon": "🫧",
+     "who": "浅海",
+     "what": "【里程碑】有机分子越来越浓，海水变成了一锅“原始汤”。",
+     "day": 33
+    },
+    {
+     "icon": "🌋",
+     "who": "咕噜火山",
+     "what": "打了个嗝，喷出一小股热气。",
+     "day": 33
+    },
+    {
+     "icon": "🌧️",
+     "who": "雨",
+     "what": "下了一整天，海洋覆盖到 41%。",
+     "day": 33
+    },
+    {
+     "icon": "⚡",
+     "who": "闪电",
+     "what": "劈进浅海，水里多了一些奇怪的小分子。",
+     "day": 33
+    }
+   ]
   }
  ],
- "last_date": "2026-10-24",
- "issue": 19,
+ "last_date": "2026-10-25",
+ "issue": 20,
  "backlog": [],
  "backlog_part": 0
 }
