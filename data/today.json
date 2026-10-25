@@ -1,52 +1,68 @@
 {
  "world": "豆星",
- "day": 33,
- "day_from": 33,
- "day_to": 33,
- "day_label": "第 33 天",
- "issue": 20,
- "sim_days": 1,
+ "day": 38,
+ "day_from": 34,
+ "day_to": 38,
+ "day_label": "第 34–38 天",
+ "issue": 21,
+ "sim_days": 5,
  "more_tomorrow": false,
- "date": "2026-10-25",
+ "date": "2026-10-26",
  "era": "原始汤纪",
- "season": "春",
+ "season": "夏",
  "weather": "雨",
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=33",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=38",
  "stats": {
-  "地表温度°C": 37,
-  "海洋%": 41,
-  "大气%": 88,
-  "有机物": 20,
+  "地表温度°C": 27,
+  "海洋%": 53,
+  "大气%": 100,
+  "有机物": 36,
   "氧气%": 0,
   "现存物种": 0,
   "灭绝物种": 0
  },
- "trend": {},
+ "trend": {
+  "地表温度°C": "37→27",
+  "海洋%": "41→53",
+  "大气%": "88→100",
+  "有机物": "20→36"
+ },
  "species": [],
  "events": [
   {
    "icon": "🫧",
-   "who": "浅海",
-   "what": "【里程碑】有机分子越来越浓，海水变成了一锅“原始汤”。",
-   "day": 33
+   "who": "原始膜",
+   "what": "一些有机分子开始把自己包起来，像是不太稳定的细胞。",
+   "day": 35,
+   "tag": "第35天"
   },
   {
-   "icon": "🌋",
-   "who": "咕噜火山",
-   "what": "打了个嗝，喷出一小股热气。",
-   "day": 33
+   "icon": "💨",
+   "who": "风",
+   "what": "卷起一阵灰尘，从一边的平原吹到另一边。（5 天里 2 次）",
+   "day": 36,
+   "tag": "第36天"
   },
   {
    "icon": "🌧️",
    "who": "雨",
-   "what": "下了一整天，海洋覆盖到 41%。",
-   "day": 33
+   "what": "下了一整天，海洋覆盖到 53%。（5 天里 4 次）",
+   "day": 38,
+   "tag": "第38天"
+  },
+  {
+   "icon": "🌙",
+   "who": "小月亮",
+   "what": "下弦月，静静看着下面。（5 天里 4 次）",
+   "day": 38,
+   "tag": "第38天"
   },
   {
    "icon": "⚡",
    "who": "闪电",
-   "what": "劈进浅海，水里多了一些奇怪的小分子。",
-   "day": 33
+   "what": "劈进浅海，水里多了一些奇怪的小分子。（5 天里 3 次）",
+   "day": 38,
+   "tag": "第38天"
   }
  ]
 }
