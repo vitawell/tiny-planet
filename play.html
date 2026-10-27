@@ -143,6 +143,7 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 const sky = C(0x8fb4ff, 0xd07a50, Math.max(hot, 1 - oxy / 25 > 0 ? 0.35 * (1 - oxy / 25) : 0)).lerp(new THREE.Color(0x8a93a3), raining ? 0.35 : 0);
 scene.background = sky; scene.fog = new THREE.Fog(sky, 22, raining ? 55 : 75);
+const deepCol = new THREE.Color(kindsAlive.has("藻类") ? 0x1f6e5c : 0x1b5d9e), skyFog = { near: 22, far: raining ? 55 : 75 };
 const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 200);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(20, 40, 10); scene.add(sun);
@@ -161,9 +162,13 @@ for (const [x, z, col, w, h, wd, y0] of deco) {
 }
 let waterSurf = null;
 if (seaLevel) {
-  const wmat = new THREE.MeshLambertMaterial({ color: kindsAlive.has("藻类") ? 0x3aa58c : 0x2f86e0, transparent: true, opacity: 0.78, side: THREE.DoubleSide });
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(N * 4, N * 4), wmat);   // 外海
+  const algae = kindsAlive.has("藻类");
+  const wmat = new THREE.MeshLambertMaterial({ color: algae ? 0x3aa58c : 0x2f86e0, transparent: true, opacity: 0.78, side: THREE.FrontSide });
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(N * 4, N * 4), wmat);   // 外海（从上往下看）
   water.rotation.x = -Math.PI / 2; water.position.set(N / 2, seaLevel + 0.85, N / 2); scene.add(water);
+  // 从水下往上看：亮青色、透光的水面，不受光照影响，不会发灰
+  const under = new THREE.Mesh(new THREE.PlaneGeometry(N * 4, N * 4), new THREE.MeshBasicMaterial({ color: algae ? 0x8fe8c8 : 0x9fe0ff, transparent: true, opacity: 0.55, side: THREE.BackSide, fog: false }));
+  under.rotation.x = -Math.PI / 2; under.position.copy(water.position); scene.add(under);
   waterSurf = water;
 }
 // 月亮
@@ -178,6 +183,7 @@ function particles(n, color, size) {
 const smoke = particles(160, 0xb9b9c0, 1.3), smokeState = [];
 for (let i = 0; i < 160; i++) smokeState.push({ t: Math.random() * 6 });
 let rain = null; if (raining) { rain = particles(1500, 0xc8dcff, 0.08); const a = rain.geometry.attributes.position.array; for (let i = 0; i < a.length; i += 3) { a[i] = Math.random() * N; a[i + 1] = Math.random() * 25; a[i + 2] = Math.random() * N; } }
+const splash = particles(240, 0xeaf6ff, 0.12); let splashI = 0;   // 雨点打在水面的小水花
 const steam = (raining && temp > 60) ? particles(300, 0xffffff, 0.35) : null, steamState = [];
 if (steam) for (let i = 0; i < 300; i++) steamState.push({ x: Math.random() * N, z: Math.random() * N, t: Math.random() * 3 });
 let meteor = null, meteorT = 3;
@@ -306,6 +312,9 @@ function step(dt) {
   const bob = (role.mode === "walk" && mv.length() > 0.1 && py <= ground(px, pz) + 0.01) ? Math.sin(tAll * 10) * 0.04 : 0;
   camera.position.set(px, py + role.eye + bob, pz);
   camera.rotation.set(pitch, yaw, 0, "YXZ");
+  const submerged = seaLevel && camera.position.y < seaLevel + 0.85;
+  if (submerged) { scene.background = deepCol; scene.fog.color.copy(deepCol); scene.fog.near = 2; scene.fog.far = 26; if (rain) rain.visible = false; }
+  else { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = skyFog.near; scene.fog.far = skyFog.far; if (rain) rain.visible = true; }
   // 标记
   let near = null;
   for (const m of markers) {
@@ -321,7 +330,14 @@ function step(dt) {
     smokeState.forEach((s, i) => { s.t += dt * vol; if (s.t > 6) s.t = 0; const r = s.t * 0.5;
       a[i * 3] = VX + 0.5 + Math.sin(i * 1.7 + tAll * 0.3) * r; a[i * 3 + 1] = H[VX][VZ] + 1 + s.t * 3; a[i * 3 + 2] = VZ + 0.5 + Math.cos(i * 2.3) * r; });
     smoke.geometry.attributes.position.needsUpdate = true; }
-  if (rain) { const a = rain.geometry.attributes.position.array; for (let i = 0; i < a.length; i += 3) { a[i + 1] -= 18 * dt; if (a[i + 1] < 0) { a[i] = px + (Math.random() - 0.5) * 30; a[i + 1] = 20; a[i + 2] = pz + (Math.random() - 0.5) * 30; } } rain.geometry.attributes.position.needsUpdate = true; }
+  if (rain) { const a = rain.geometry.attributes.position.array, sa = splash.geometry.attributes.position.array;
+    for (let i = 0; i < a.length; i += 3) { a[i + 1] -= 18 * dt;
+      // 雨滴落到水面或地面就停，不会钻进水里
+      const xx = Math.min(N - 1, Math.max(0, a[i])), zz = Math.min(N - 1, Math.max(0, a[i + 2]));
+      const floor = Math.max(ground(xx, zz), seaLevel ? seaLevel + 0.85 : 0);
+      if (a[i + 1] < floor) { const k = (splashI++ % 240) * 3; sa[k] = a[i]; sa[k + 1] = floor + 0.04; sa[k + 2] = a[i + 2];
+        a[i] = px + (Math.random() - 0.5) * 30; a[i + 1] = 20; a[i + 2] = pz + (Math.random() - 0.5) * 30; } }
+    rain.geometry.attributes.position.needsUpdate = true; splash.geometry.attributes.position.needsUpdate = true; }
   if (steam) { const a = steam.geometry.attributes.position.array; steamState.forEach((s, i) => { s.t += dt; if (s.t > 3) { s.t = 0; s.x = px + (Math.random() - 0.5) * 24; s.z = pz + (Math.random() - 0.5) * 24; }
       const xx = Math.min(N - 1, Math.max(0, s.x)), zz = Math.min(N - 1, Math.max(0, s.z)); a[i * 3] = s.x; a[i * 3 + 1] = ground(xx, zz) + s.t * 0.8; a[i * 3 + 2] = s.z; }); steam.geometry.attributes.position.needsUpdate = true; }
   if (meteor) { meteorT -= dt; const k = Math.max(0, meteorT) / 3;
