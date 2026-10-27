@@ -1,22 +1,22 @@
 {
  "world": "豆星",
- "day": 39,
+ "day": 44,
  "seed": 20261007,
  "era": 4,
  "env": {
-  "temp": 28,
-  "ocean": 58,
+  "temp": 23,
+  "ocean": 70,
   "air": 100,
-  "organics": 40,
+  "organics": 52,
   "oxygen": 0,
-  "volcano": 35,
-  "moon": 7
+  "volcano": 33,
+  "moon": 4
  },
  "species": [
   {
    "name": "铃砂菌",
    "kind": "微生物",
-   "pop": 12,
+   "pop": 31,
    "born": 39,
    "parent": null,
    "traits": {
@@ -620,10 +620,51 @@
      "day": 39
     }
    ]
+  },
+  {
+   "day": 44,
+   "label": "第 40–44 天",
+   "events": [
+    {
+     "icon": "⚡",
+     "who": "闪电",
+     "what": "劈进浅海，水里多了一些奇怪的小分子。",
+     "day": 41,
+     "tag": "第41天"
+    },
+    {
+     "icon": "🌋",
+     "who": "咕噜火山",
+     "what": "打了个嗝，喷出一小股热气。",
+     "day": 43,
+     "tag": "第43天"
+    },
+    {
+     "icon": "🌧️",
+     "who": "雨",
+     "what": "下了一整天，海洋覆盖到 70%。（5 天里 4 次）",
+     "day": 44,
+     "tag": "第44天"
+    },
+    {
+     "icon": "🦠",
+     "who": "铃砂菌",
+     "what": "又分裂了好几轮，现在约 31 个。（5 天里 5 次）",
+     "day": 44,
+     "tag": "第44天"
+    },
+    {
+     "icon": "🌙",
+     "who": "小月亮",
+     "what": "满月，静静看着下面。（5 天里 4 次）",
+     "day": 44,
+     "tag": "第44天"
+    }
+   ]
   }
  ],
- "last_date": "2026-10-27",
- "issue": 22,
+ "last_date": "2026-10-28",
+ "issue": 23,
  "backlog": [],
  "backlog_part": 0,
  "proto_cells": 1
