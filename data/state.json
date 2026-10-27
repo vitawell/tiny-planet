@@ -1,23 +1,38 @@
 {
  "world": "豆星",
- "day": 38,
+ "day": 39,
  "seed": 20261007,
- "era": 3,
+ "era": 4,
  "env": {
-  "temp": 27,
-  "ocean": 53,
+  "temp": 28,
+  "ocean": 58,
   "air": 100,
-  "organics": 36,
+  "organics": 40,
   "oxygen": 0,
-  "volcano": 36,
-  "moon": 6
+  "volcano": 35,
+  "moon": 7
  },
- "species": [],
+ "species": [
+  {
+   "name": "铃砂菌",
+   "kind": "微生物",
+   "pop": 12,
+   "born": 39,
+   "parent": null,
+   "traits": {
+    "耐热": 0.17280388194333374,
+    "耐旱": 0.6258002602596829,
+    "繁殖": 0.37003651357763057,
+    "移动": 0.15522250382539415
+   }
+  }
+ ],
  "extinct": 0,
  "milestones": [
   "crust",
   "sea",
-  "soup"
+  "soup",
+  "life"
  ],
  "log": [
   {
@@ -575,10 +590,40 @@
      "tag": "第38天"
     }
    ]
+  },
+  {
+   "day": 39,
+   "label": "第 39 天",
+   "events": [
+    {
+     "icon": "🦠",
+     "who": "铃砂菌",
+     "what": "【里程碑】在火山热泉边，第一个会自我复制的小泡泡出现了。豆星有生命了。",
+     "day": 39
+    },
+    {
+     "icon": "🌧️",
+     "who": "雨",
+     "what": "下了一整天，海洋覆盖到 58%。",
+     "day": 39
+    },
+    {
+     "icon": "⚡",
+     "who": "闪电",
+     "what": "劈进浅海，水里多了一些奇怪的小分子。",
+     "day": 39
+    },
+    {
+     "icon": "🦠",
+     "who": "铃砂菌",
+     "what": "又分裂了好几轮，现在约 12 个。",
+     "day": 39
+    }
+   ]
   }
  ],
- "last_date": "2026-10-26",
- "issue": 21,
+ "last_date": "2026-10-27",
+ "issue": 22,
  "backlog": [],
  "backlog_part": 0,
  "proto_cells": 1
