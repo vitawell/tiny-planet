@@ -148,12 +148,37 @@ const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 2
 scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(20, 40, 10); scene.add(sun);
 const box = new THREE.BoxGeometry(1, 1, 1);
-const inst = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial(), blocks.length);
-const m4 = new THREE.Matrix4();
-blocks.forEach(([x, y, z, c], i) => { m4.makeTranslation(x + 0.5, y + 0.5, z + 0.5); inst.setMatrixAt(i, m4); inst.setColorAt(i, c); });
-scene.add(inst);
-if (lavaBlocks.length) { const li = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial({ color: 0xff6a1a }), lavaBlocks.length);
-  lavaBlocks.forEach(([x, y, z], i) => { m4.makeTranslation(x + 0.5, y + 0.5, z + 0.5); li.setMatrixAt(i, m4); }); scene.add(li);
+// 像素纹理：16×16 灰度噪点，最近邻放大，方块感更像《我的世界》
+function pixTex(seed, lo) { const c = document.createElement("canvas"); c.width = c.height = 16; const g = c.getContext("2d");
+  for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) { const v = Math.round(255 * (lo + (1 - lo) * hash(i + seed, j * 7 + seed))); g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(i, j, 1, 1); }
+  const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t; }
+// 只画露在外面的面；每个顶点按周围方块算环境光遮蔽（角落更暗），顶面亮、侧面暗
+const solid = new Set(); for (const b of blocks) solid.add(b[0] + "," + b[1] + "," + b[2]); for (const b of lavaBlocks) solid.add(b[0] + "," + b[1] + "," + b[2]);
+const isS = (x, y, z) => solid.has(x + "," + y + "," + z);
+const AXES = [[0, 1, 2], [1, 2, 0], [2, 0, 1]], SHADE = [0.8, 1.0, 0.65], AOF = [0.5, 0.66, 0.83, 1];
+function mesh(list, mat) {
+  const pos = [], col = [], uv = [], nor = [], idx = []; const p = [0, 0, 0];
+  for (const [bx, by, bz, c] of list) for (let a = 0; a < 3; a++) for (const sg of [1, -1]) {
+    if (a === 1 && sg < 0) continue;                                   // 底面永远看不到
+    const [A, U, V] = AXES[a]; const b = [bx, by, bz], n = [0, 0, 0]; n[A] = sg;
+    if (isS(bx + n[0], by + n[1], bz + n[2])) continue;
+    let cs = [[0, 0], [1, 0], [1, 1], [0, 1]]; if (sg < 0) cs = cs.reverse();
+    const base = pos.length / 3, ao = [];
+    for (const [cu, cv] of cs) {
+      p[A] = b[A] + (sg > 0 ? 1 : 0); p[U] = b[U] + cu; p[V] = b[V] + cv; pos.push(p[0], p[1], p[2]);
+      const o = [b[0] + n[0], b[1] + n[1], b[2] + n[2]], du = cu ? 1 : -1, dv = cv ? 1 : -1;
+      const s1 = [...o]; s1[U] += du; const s2 = [...o]; s2[V] += dv; const s3 = [...o]; s3[U] += du; s3[V] += dv;
+      const a1 = isS(...s1), a2 = isS(...s2), a3 = isS(...s3); const k = (a1 && a2) ? 0 : 3 - a1 - a2 - a3; ao.push(k);
+      const f = AOF[k] * SHADE[a]; col.push(c.r * f, c.g * f, c.b * f); uv.push(cu, cv); nor.push(n[0], n[1], n[2]);
+    }
+    if (ao[0] + ao[2] < ao[1] + ao[3]) idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base); else idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
+  const m = new THREE.Mesh(g, mat); scene.add(m); return m;
+}
+mesh(blocks, new THREE.MeshLambertMaterial({ vertexColors: true, map: pixTex(3, 0.78) }));
+if (lavaBlocks.length) { mesh(lavaBlocks.map(b => [b[0], b[1], b[2], new THREE.Color(0xff6a1a)]), new THREE.MeshBasicMaterial({ vertexColors: true, map: pixTex(11, 0.7) }));
   const glow = new THREE.PointLight(0xff6a1a, 30, 14); glow.position.set(VX + 0.5, H[VX][VZ] + 2, VZ + 0.5); scene.add(glow); }
 for (const [x, z, col, w, h, wd, y0] of deco) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, wd), new THREE.MeshLambertMaterial({ color: col }));
@@ -164,13 +189,18 @@ let waterSurf = null;
 if (seaLevel) {
   const algae = kindsAlive.has("藻类");
   const wmat = new THREE.MeshLambertMaterial({ color: algae ? 0x3aa58c : 0x2f86e0, transparent: true, opacity: 0.78, side: THREE.FrontSide });
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(N * 4, N * 4), wmat);   // 外海（从上往下看）
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(N * 4, N * 4, 96, 96), wmat);   // 外海（从上往下看），细分后可以起伏
   water.rotation.x = -Math.PI / 2; water.position.set(N / 2, seaLevel + 0.85, N / 2); scene.add(water);
   // 从水下往上看：亮青色、透光的水面，不受光照影响，不会发灰
   const under = new THREE.Mesh(new THREE.PlaneGeometry(N * 4, N * 4), new THREE.MeshBasicMaterial({ color: algae ? 0x8fe8c8 : 0x9fe0ff, transparent: true, opacity: 0.55, side: THREE.BackSide, fog: false }));
-  under.rotation.x = -Math.PI / 2; under.position.copy(water.position); scene.add(under);
+  under.geometry = water.geometry; under.rotation.x = -Math.PI / 2; under.position.copy(water.position); scene.add(under);
   waterSurf = water;
 }
+// 方块云：慢慢飘，下雨时更多更灰
+const clouds = new THREE.Group(); scene.add(clouds);
+{ const cm = new THREE.MeshLambertMaterial({ color: raining ? 0x8d929c : 0xffffff, transparent: true, opacity: raining ? 0.92 : 0.85 });
+  for (let i = 0; i < (raining ? 26 : 12); i++) { const w = 3 + Math.floor(hash(i, 5) * 6), dd = 2 + Math.floor(hash(5, i) * 5);
+    const c = new THREE.Mesh(new THREE.BoxGeometry(w, 1, dd), cm); c.position.set(hash(i, 9) * N * 1.6 - N * 0.3, 22 + hash(9, i) * 3, hash(i, 13) * N * 1.6 - N * 0.3); clouds.add(c); } }
 // 月亮
 const moon = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 12), new THREE.MeshBasicMaterial({ color: 0xf5ecc8, fog: false }));
 moon.position.set(-30, 45, -40); scene.add(moon);
@@ -187,11 +217,38 @@ const splash = particles(240, 0xeaf6ff, 0.12); let splashI = 0;   // 雨点打�
 const steam = (raining && temp > 60) ? particles(300, 0xffffff, 0.35) : null, steamState = [];
 if (steam) for (let i = 0; i < 300; i++) steamState.push({ x: Math.random() * N, z: Math.random() * N, t: Math.random() * 3 });
 let meteor = null, meteorT = 3;
+const metEv = events.find(e => e.icon === "☄️"), intoSea = seaLevel && metEv && /海|浪/.test(metEv.what || "");
+let MX = CX, MZ = CZ, MY = H[CX][CZ];
+if (intoSea) { for (let j = 0; j < 500; j++) { const x = 4 + Math.floor(hash(j, 77) * (N - 8)), z = 4 + Math.floor(hash(77, j) * (N - 8)); if (H[x][z] < seaLevel - 1 && Math.hypot(x - px0(), z - pz0()) > 10) { MX = x; MZ = z; break; } } MY = seaLevel + 0.85; }
+function px0() { return N / 2; } function pz0() { return N / 2; }
+const wave = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.2, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide }));
+wave.rotation.x = -Math.PI / 2; wave.position.set(MX + 0.5, MY + 0.03, MZ + 0.5); scene.add(wave); let waveT = 9;
+const spray = particles(120, 0xeaf6ff, 0.25), sprayV = []; for (let i = 0; i < 120; i++) sprayV.push([0, -99, 0]);
 let trail = null;
 if (hasIcon("☄️")) { meteor = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false })); scene.add(meteor);
   trail = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(60 * 3), 3)), new THREE.PointsMaterial({ color: 0xffa040, size: 0.9, fog: false, transparent: true, opacity: 0.8 })); scene.add(trail); }
 let boltLine = null, boltT = 4;
 if (hasIcon("⚡")) { boltLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 8 }, () => new THREE.Vector3())), new THREE.LineBasicMaterial({ color: 0xfff7c0 })); boltLine.visible = false; scene.add(boltLine); }
+
+// ---------- 热泉与微生物群落 ----------
+const vents = [];
+if (seaLevel) { const cand = [];
+  for (let x = 2; x < N - 2; x++) for (let z = 2; z < N - 2; z++) if (H[x][z] < seaLevel - 1) cand.push([Math.hypot(x - VX, z - VZ), x, z]);
+  cand.sort((a, b) => a[0] - b[0]);
+  for (const [, x, z] of cand) { if (vents.length >= 4) break; if (vents.every(([a, b]) => Math.hypot(a - x, b - z) > 4)) vents.push([x, z]); } }
+const ventMat = new THREE.MeshLambertMaterial({ color: 0x3a2f2a }), ventTop = new THREE.MeshBasicMaterial({ color: 0xff8a3a });
+for (const [x, z] of vents) { const hgt = 1.4 + hash(x, z);
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.7, hgt, 0.7), ventMat); ch.position.set(x + 0.5, H[x][z] + hgt / 2, z + 0.5); scene.add(ch);
+  const tp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.4), ventTop); tp.position.set(x + 0.5, H[x][z] + hgt + 0.05, z + 0.5); scene.add(tp); }
+const bubbles = vents.length ? particles(vents.length * 40, 0xdff4ff, 0.12) : null, bubState = [];
+if (bubbles) for (let i = 0; i < vents.length * 40; i++) bubState.push({ v: i % vents.length, t: Math.random() * 4 });
+const microbe = species.find(s => s.kind === "微生物");
+let colony = null, colState = [];
+if (microbe && vents.length) {
+  const n = Math.min(160, 30 + Math.round((parseFloat(microbe.pop) || 50) * 1.2));
+  colony = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xa8ff9a }), n); scene.add(colony);
+  for (let i = 0; i < n; i++) { const [vx, vz] = vents[i % vents.length]; colState.push({ x: vx + 0.5, z: vz + 0.5, y: H[vx][vz] + 0.4, r: 0.4 + Math.random() * 1.6, a: Math.random() * 6.28, h: Math.random() * 2, s: 0.3 + Math.random() }); }
+}
 
 // ---------- 事件标记 ----------
 function spot(ev, i) {
@@ -199,8 +256,9 @@ function spot(ev, i) {
   const pick = (k) => { for (let j = 0; j < 400; j++) { const x = 3 + Math.floor(hash(i * 31 + j, k) * (N - 6)), z = 3 + Math.floor(hash(k, i * 17 + j) * (N - 6));
       const wet = seaLevel && H[x][z] <= seaLevel; if ((role.mode === "swim") === !!wet || (!seaLevel)) return [x, z]; } return [N / 2, N / 2]; };
   if (ev.icon === "🌋") return [VX + 2, VZ + 2];
-  if (ev.icon === "☄️") return [CX, CZ];
+  if (ev.icon === "☄️") return [MX, MZ];
   if (ev.icon === "🪦") return [20, 20];
+  if (sp && vents.length) return [vents[0][0] + 1, vents[0][1] + 1];   // 物种事件放在热泉边
   if (sp && role.mode === "swim") return pick(5);
   return pick(ev.icon.codePointAt(0) % 97);
 }
@@ -227,6 +285,7 @@ let px, pz;
   let best = null; for (let j = 0; j < 2000 && !best; j++) { const x = 6 + hash(j, 7) * (N - 12), z = 6 + hash(7, j) * (N - 12);
     const shore = [[2, 0], [-2, 0], [0, 2], [0, -2]].some(([a, b]) => isWater(x + a, z + b));
     if (role.mode === "swim" ? isWater(x, z) : (!isWater(x, z) && !lavaCells.has(Math.floor(x) + "," + Math.floor(z)) && (shore || j > 1500 || !seaLevel) && Math.hypot(x - VX, z - VZ) > 9)) best = [x, z]; }
+  if (role.kind === "微生物" && vents.length) best = [vents[0][0] + 3.5, vents[0][1] + 0.5];   // 微生物出生在热泉旁
   if (!best && role.mode === "swim") role.mode = "walk";
   [px, pz] = best || [N / 2, N / 2];
 }
@@ -341,13 +400,24 @@ function step(dt) {
   if (steam) { const a = steam.geometry.attributes.position.array; steamState.forEach((s, i) => { s.t += dt; if (s.t > 3) { s.t = 0; s.x = px + (Math.random() - 0.5) * 24; s.z = pz + (Math.random() - 0.5) * 24; }
       const xx = Math.min(N - 1, Math.max(0, s.x)), zz = Math.min(N - 1, Math.max(0, s.z)); a[i * 3] = s.x; a[i * 3 + 1] = ground(xx, zz) + s.t * 0.8; a[i * 3 + 2] = s.z; }); steam.geometry.attributes.position.needsUpdate = true; }
   if (meteor) { meteorT -= dt; const k = Math.max(0, meteorT) / 3;
-    meteor.position.set(CX + 0.5 + k * 30, H[CX][CZ] + k * 40, CZ + 0.5 - k * 20); meteor.visible = meteorT > 0;
-    { const a = trail.geometry.attributes.position.array; for (let i = 0; i < 60; i++) { const kk = k + i * 0.006; a[i * 3] = CX + 0.5 + kk * 30 + (Math.random() - .5) * .4; a[i * 3 + 1] = H[CX][CZ] + kk * 40; a[i * 3 + 2] = CZ + 0.5 - kk * 20; } trail.geometry.attributes.position.needsUpdate = true; trail.visible = meteorT > 0; }
-    if (meteorT < -0.3) { meteorT = 6 + Math.random() * 3; flash.style.opacity = Math.hypot(px - CX, pz - CZ) < 16 ? 0.4 : 0.12; say("☄️ 轰！一块陨石落进了西南边的陨石坑"); } }
+    meteor.position.set(MX + 0.5 + k * 30, MY + k * 40, MZ + 0.5 - k * 20); meteor.visible = meteorT > 0;
+    { const a = trail.geometry.attributes.position.array; for (let i = 0; i < 60; i++) { const kk = k + i * 0.006; a[i * 3] = MX + 0.5 + kk * 30 + (Math.random() - .5) * .4; a[i * 3 + 1] = MY + kk * 40; a[i * 3 + 2] = MZ + 0.5 - kk * 20; } trail.geometry.attributes.position.needsUpdate = true; trail.visible = meteorT > 0; }
+    if (meteorT < -0.3) { meteorT = 6 + Math.random() * 3; flash.style.opacity = Math.hypot(px - MX, pz - MZ) < 16 ? 0.4 : 0.12;
+      if (intoSea) { waveT = 0; sprayV.forEach(v => { const an = Math.random() * 6.28, sp = 1 + Math.random() * 3; v[0] = Math.cos(an) * sp; v[1] = 6 + Math.random() * 8; v[2] = Math.sin(an) * sp; v.p = [MX + 0.5, MY, MZ + 0.5]; }); say("☄️ 轰！一块陨石砸进海里，掀起一圈大浪"); }
+      else say("☄️ 轰！一块陨石落进了西南边的陨石坑"); } }
+  if (intoSea) { waveT += dt; const r = 1 + waveT * 6; wave.scale.set(r, r, 1); wave.material.opacity = Math.max(0, 0.8 - waveT * 0.3);
+    const a = spray.geometry.attributes.position.array; sprayV.forEach((v, i) => { if (!v.p) return; v[1] -= 15 * dt; v.p[0] += v[0] * dt; v.p[1] += v[1] * dt; v.p[2] += v[2] * dt; if (v.p[1] < MY) v.p[1] = -99; a[i * 3] = v.p[0]; a[i * 3 + 1] = v.p[1]; a[i * 3 + 2] = v.p[2]; }); spray.geometry.attributes.position.needsUpdate = true; }
   if (boltLine) { boltT -= dt; if (boltT < 0) { boltT = 5 + Math.random() * 6; const bx = px + (Math.random() - 0.5) * 20, bz = pz + (Math.random() - 0.5) * 20;
       const pts = []; for (let i = 0; i < 8; i++) pts.push(new THREE.Vector3(bx + (Math.random() - 0.5) * 1.5, 30 - i * (30 - Math.max(seaLevel, 1)) / 7, bz + (Math.random() - 0.5) * 1.5));
       boltLine.geometry.setFromPoints(pts); boltLine.visible = true; flash.style.opacity = 0.6; }
     if (boltT < 4.8) boltLine.visible = false; }
+  if (waterSurf) { const wa = waterSurf.geometry.attributes.position, arr = wa.array;
+    for (let i = 0; i < arr.length; i += 3) arr[i + 2] = Math.sin(arr[i] * 0.7 + tAll * 1.6) * 0.06 + Math.cos(arr[i + 1] * 0.9 + tAll * 1.2) * 0.05; wa.needsUpdate = true; }
+  clouds.children.forEach(c => { c.position.x += dt * 0.6; if (c.position.x > N * 1.4) c.position.x = -N * 0.4; });
+  if (bubbles) { const a = bubbles.geometry.attributes.position.array; bubState.forEach((b, i) => { b.t += dt; const [vx, vz] = vents[b.v], y0 = H[vx][vz] + 1.6, top = seaLevel + 0.8;
+      if (y0 + b.t * 1.2 > top) b.t = 0; a[i * 3] = vx + 0.5 + Math.sin(b.t * 3 + i) * 0.15; a[i * 3 + 1] = y0 + b.t * 1.2; a[i * 3 + 2] = vz + 0.5 + Math.cos(b.t * 2 + i) * 0.15; }); bubbles.geometry.attributes.position.needsUpdate = true; }
+  if (colony) { const m = new THREE.Matrix4(); colState.forEach((c, i) => { c.a += dt * c.s * 0.6;
+      m.makeTranslation(c.x + Math.cos(c.a) * c.r, c.y + c.h * 0.5 + Math.sin(tAll * c.s + i) * 0.15, c.z + Math.sin(c.a) * c.r); colony.setMatrixAt(i, m); }); colony.instanceMatrix.needsUpdate = true; }
   flash.style.opacity = Math.max(0, (+flash.style.opacity || 0) - dt * 2);
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toast.style.display = "none"; }
 }
