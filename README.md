@@ -20,3 +20,7 @@
 冬天气温 ≤ 12°C 时浅海结冰，冻满 2 天后回暖解冻：冰缝把有机分子浓缩进细胞大小的小泡，解冻当天有机物 +4~8、微生物额外增长 15–25%（不超过海洋承载量）；尚无生命时，之后 7 天诞生第一个微生物的概率翻倍。每个冬天最多一轮。
 
 依据：Shinoda et al., *Ice drives the emergence of functional protocells*, bioRxiv 2026. https://doi.org/10.64898/2026.10.13.758973
+
+## 蜘蛛侠模式
+
+第一人称页面右侧 🕸️（桌面按 Q）打开：点屏幕上 40 格内看得见的方块，蛛丝射过去把你拉过去，打中侧面会翻上顶面（桌面也可按 F 射向准星）。微生物只能在水里荡，粘不住水面，不会落进岩浆。玩法借鉴 [terryHu7/homecraft](https://github.com/terryHu7/homecraft) 的 web-zip。
