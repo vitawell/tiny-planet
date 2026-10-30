@@ -98,7 +98,32 @@ def simulate(s, rng):
     if raining:
         e["ocean"] = clamp(e["ocean"] + rng.randint(2, 5), 0, 70)
     lightning = raining and rng.random() < 0.5
-    if e["ocean"] > 20:
+
+    # ---------- 冬季冰冻-解冻 ----------
+    # 依据：Shinoda et al., bioRxiv 2026, doi:10.64898/2026.10.13.758973
+    # 慢速结冰把分子和膜材料挤进冰缝里的液态小水道；慢速解冻形成细胞大小的囊泡，把浓缩的分子包进去。
+    e.setdefault("ice", 0)
+    if not e["ice"] and season == "冬" and e["temp"] <= 12 and e["ocean"] > 20 and s.get("ft_winter") != d // 28:
+        e["ice"] = 1; s["ice_days"] = 0; s["ft_winter"] = d // 28      # 每个冬天最多一轮
+        ev.append(("❄️", "浅海结冰", "冬夜很冷，浅海慢慢结了一层薄冰。冰晶把水挤开，有机分子和膜碎片被赶进冰缝里的小水道，越挤越浓。"))
+    elif e["ice"]:
+        s["ice_days"] = s.get("ice_days", 0) + 1
+        if s["ice_days"] >= 2 and (e["temp"] >= 14 or season != "冬"):   # 至少冻 2 天，对应“慢速”
+            e["ice"] = 0; s["ft_cycles"] = s.get("ft_cycles", 0) + 1
+            o0 = e["organics"]; e["organics"] = clamp(o0 + rng.randint(4, 8), 0, 100)
+            first = "这是豆星第一次冻融。" if s["ft_cycles"] == 1 else ""
+            micro = sorted([x for x in s["species"] if x["kind"] == "微生物" and x["pop"] > 0], key=lambda x: -x["pop"])
+            if micro:
+                cap = max(5, e["ocean"] * 100 * KINDS["微生物"][3]); top = micro[0]; p0 = top["pop"]
+                for sp in micro: sp["pop"] = max(sp["pop"], int(min(cap, sp["pop"] * (1 + rng.uniform(0.15, 0.25)))))
+                grow = f"数量从 {p0} 涨到 {top['pop']}" if top["pop"] > p0 else f"可浅海已经挤满了，数量稳在 {p0} 左右"
+                text = f"天回暖，冰慢慢化开。冰缝里浓缩的分子被一个个细胞大小的小泡包住，{top['name']}趁机吃饱，{grow}。" + (f"（有机物 {o0}→{e['organics']}）" if e["organics"] > o0 else "")
+            else:
+                s["ft_boost_until"] = d + 7
+                text = f"冰化开后，浓缩的分子被细胞大小的小泡包住，有些小泡里第一次开始合成新分子。" + (f"（有机物 {o0}→{e['organics']}）" if e["organics"] > o0 else "")
+            ev.append(("🧊", "解冻", first + text))
+
+    if e["ocean"] > 20 and not e["ice"]:       # 冰封期间有机物不再增加
         e["organics"] = clamp(e["organics"] + (3 if lightning else 1) + (1 if e["volcano"] > 20 else 0), 0, 100)
     # 原始膜：让生命起源经历可观察的中间阶段，而非突然出现
     if e["organics"] >= 25 and s.get("proto_cells", 0) == 0:
@@ -131,7 +156,7 @@ def simulate(s, rng):
     if e["temp"] < 600: milestone(s, "crust", ev, "🪨", "地壳", "岩浆海凝固出第一片稳定的地壳。") and s.update(era=max(s["era"], 1))
     if e["ocean"] >= 3: milestone(s, "sea", ev, "🌊", "原始海洋", "低洼处积起了第一汪海水。") and s.update(era=max(s["era"], 2))
     if e["organics"] >= 20: milestone(s, "soup", ev, "🫧", "浅海", "有机分子越来越浓，海水变成了一锅“原始汤”。") and s.update(era=max(s["era"], 3))
-    if e["organics"] >= 40 and s.get("proto_cells", 0) and not has(s, "微生物") and rng.random() < 0.18:
+    if e["organics"] >= 40 and s.get("proto_cells", 0) and not has(s, "微生物") and rng.random() < (0.36 if d <= s.get("ft_boost_until", -1) else 0.18):
         sp = add_species(s, rng, "微生物", 10)
         milestone(s, "life", ev, "🦠", sp["name"], "在火山热泉边，第一个会自我复制的小泡泡出现了。豆星有生命了。")
         s["era"] = max(s["era"], 4)
@@ -177,6 +202,7 @@ def simulate(s, rng):
         fit = 0.75 + 0.5 * (tr.get("耐热", 0.5) if e["temp"] > 50 else 1 - tr.get("耐热", 0.5))
         fit *= 0.75 + 0.5 * (tr.get("耐旱", 0.5) if e["ocean"] < 20 else 1 - tr.get("耐旱", 0.5))
         growth = r * (0.7 + tr.get("繁殖", 0.5) * 0.6) * fit
+        if e.get("ice") and hab == "海": growth *= 0.5          # 冰下太冷，长得慢
         n = n + growth * n * (1 - n / cap) + rng.gauss(0, n * 0.05)
         sp["pop"] = max(0, int(n))
         if sp["pop"] == 0:
@@ -255,6 +281,9 @@ def draw_planet(s, season, path):
     algae = sum(x["pop"] for x in s["species"] if x["kind"] in ("藻类",) and x["pop"] > 0)
     sea_col = lerp((60, 130, 200), (70, 170, 140), min(1, algae / 3000))
     nsea = int(len(seas) * e["ocean"] / 70)
+    if e.get("ice"):                                   # 结冰：先铺一圈稍大的白冰，再画海，只露出浅海边缘
+        for x, y, r in seas[:nsea]:
+            ld.ellipse([x - r - 9, y - r * 0.8 - 9, x + r + 9, y + r * 0.8 + 9], fill=(228, 242, 250))
     for x, y, r in seas[:nsea]:
         ld.ellipse([x - r, y - r * 0.8, x + r, y + r * 0.8], fill=sea_col)
     # 微生物的热泉光点
@@ -316,6 +345,7 @@ def classify(ev):
     icon, who, text = ev
     if text.startswith("【里程碑】"): return 3
     if icon == "🪦" or "成了一个新物种" in text: return 2
+    if icon == "🧊" and "第一次冻融" in text: return 2
     return 1
 
 
@@ -427,7 +457,7 @@ def main():
     e = s["env"]
     alive = [x for x in s["species"] if x["pop"] > 0]
     wr = random.Random(s["seed"] + s["issue"])
-    weather = "岩浆风暴" if e["temp"] > 600 else ("雨" if any(x["icon"] == "🌧️" for x in events) else wr.choice(["晴", "多云", "大风", "薄雾"]))
+    weather = "岩浆风暴" if e["temp"] > 600 else "冰" if e.get("ice") or any(x["icon"] == "❄️" for x in events) else ("雨" if any(x["icon"] == "🌧️" for x in events) else wr.choice(["晴", "多云", "大风", "薄雾"]))
     today = {
         "world": s["world"], "day": s["day"], "day_from": day_from, "day_to": day_to, "day_label": label,
         "issue": s["issue"], "sim_days": sims, "more_tomorrow": bool(s.get("backlog")),
