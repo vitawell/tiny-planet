@@ -56,6 +56,7 @@ const species = d.species || [];
 const label = d.day_label || ("第 " + d.day + " 天");
 const hasIcon = i => events.some(e => e.icon === i);
 const raining = hasIcon("🌧️") || d.weather === "雨";
+const icy = d.weather === "冰" || hasIcon("❄️");
 const kindsAlive = new Set(species.map(s => s.kind));
 
 // ---------- 角色：跟着当天的世界走 ----------
@@ -250,6 +251,19 @@ if (microbe && vents.length) {
   for (let i = 0; i < n; i++) { const [vx, vz] = vents[i % vents.length]; colState.push({ x: vx + 0.5, z: vz + 0.5, y: H[vx][vz] + 0.4, r: 0.4 + Math.random() * 1.6, a: Math.random() * 6.28, h: Math.random() * 2, s: 0.3 + Math.random() }); }
 }
 
+// ---------- 冰面：浅水（水深 ≤ 2 格）结冰，热泉附近不冻 ----------
+const iceCells = new Set();
+if (icy && seaLevel) {
+  const pos = [], idx = [], y = seaLevel + 0.88;
+  for (const [x, z, h] of waterCells) { if (seaLevel - h > 2 || vents.some(([a, b]) => Math.hypot(a - x, b - z) < 4)) continue;
+    iceCells.add(x + "," + z); const b = pos.length / 3; pos.push(x, y, z, x + 1, y, z, x + 1, y, z + 1, x, y, z + 1); idx.push(b, b + 2, b + 1, b, b + 3, b + 2); }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  const tex = pixTex(21, 0.86);
+  const ice = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xe6f4ff, map: tex, transparent: true, opacity: 0.88, side: THREE.DoubleSide }));
+  const uv = []; for (let i = 0; i < pos.length / 12; i++) uv.push(0, 0, 1, 0, 1, 1, 0, 1); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  scene.add(ice);
+}
+
 // ---------- 事件标记 ----------
 function spot(ev, i) {
   const sp = species.find(s => s.name === ev.who);
@@ -325,7 +339,7 @@ const mapC = document.getElementById("map"), mg = mapC.getContext("2d"), K = 240
 const mapBase = document.createElement("canvas"); mapBase.width = mapBase.height = 240;
 { const g = mapBase.getContext("2d");
   for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) { const h = H[x][z];
-    g.fillStyle = (seaLevel && h <= seaLevel) ? "#2f86e0" : lavaCells.has(x + "," + z) ? "#ff6a1a" : Math.hypot(x - VX, z - VZ) < 8 ? "#2e2624" : Math.hypot(x - CX, z - CZ) < 3.4 ? "#3a3230" : `hsl(20,6%,${30 + h * 3}%)`;
+    g.fillStyle = iceCells.has(x + "," + z) ? "#dff1ff" : (seaLevel && h <= seaLevel) ? "#2f86e0" : lavaCells.has(x + "," + z) ? "#ff6a1a" : Math.hypot(x - VX, z - VZ) < 8 ? "#2e2624" : Math.hypot(x - CX, z - CZ) < 3.4 ? "#3a3230" : `hsl(20,6%,${30 + h * 3}%)`;
     g.fillRect(x * K, z * K, K + 0.5, K + 0.5); } }
 function drawMap() { mg.drawImage(mapBase, 0, 0);
   mg.font = "30px serif"; mg.textAlign = "center"; mg.textBaseline = "middle";
@@ -355,7 +369,7 @@ function step(dt) {
     if (!isWater(nx, nz)) { if (Math.random() < 0.02) say("这里是陆地，你只能在水里游"); }
     else { px = nx; pz = nz; }
     vy = (up ? 1.6 : 0) - (down ? 1.6 : 0) + Math.sin(tAll * 2) * 0.05; py += vy * dt;
-    const g = ground(px, pz); py = Math.max(g + 0.05, Math.min(seaLevel + 0.55, py));
+    const g = ground(px, pz); py = Math.max(g + 0.05, Math.min(seaLevel + (iceCells.has(Math.floor(px) + "," + Math.floor(pz)) ? 0.5 - role.eye : 0.55), py));
   } else {
     const g1 = ground(nx, nz);
     if (g1 <= py + 1.01) { px = nx; pz = nz; if (g1 > py) py = g1; }   // 一格台阶自动迈上去
