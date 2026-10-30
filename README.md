@@ -14,3 +14,9 @@
 - `data/state.json`：世界持久状态（最近 30 天事件）
 
 ![today](data/planet.png)
+
+## 冬季冰冻-解冻
+
+冬天气温 ≤ 12°C 时浅海结冰，冻满 2 天后回暖解冻：冰缝把有机分子浓缩进细胞大小的小泡，解冻当天有机物 +4~8、微生物额外增长 15–25%（不超过海洋承载量）；尚无生命时，之后 7 天诞生第一个微生物的概率翻倍。每个冬天最多一轮。
+
+依据：Shinoda et al., *Ice drives the emergence of functional protocells*, bioRxiv 2026. https://doi.org/10.64898/2026.10.13.758973
