@@ -16,6 +16,10 @@ canvas{display:block}
 #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
 .btn{position:fixed;right:24px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:14px}
 #up{bottom:110px}#down{bottom:30px}
+#web{bottom:190px;font-size:26px}#web.on{background:rgba(255,70,70,.55);border-color:#fff}
+#aim{position:fixed;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid rgba(255,255,255,.55);border-radius:50%;pointer-events:none;display:none}
+#aim::after{content:"";position:absolute;left:10px;top:10px;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.7)}
+#aim.ok{border-color:#ff5050;box-shadow:0 0 8px #ff5050}#aim.ok::after{background:#ff5050}
 #start{position:fixed;inset:0;background:rgba(10,14,30,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;gap:10px}
 #start h1{margin:0;font-size:24px}
 #start p{margin:0;max-width:420px;color:#c8d1ea;line-height:1.6}
@@ -36,6 +40,8 @@ canvas{display:block}
 <div id="joy"><div id="knob"></div></div>
 <div class="btn" id="up">跳</div>
 <div class="btn" id="down" style="display:none">潜</div>
+<div class="btn" id="web" title="蜘蛛侠模式（Q）">🕸️</div>
+<div id="aim"></div>
 <div id="start"><h1 id="st">豆星</h1><p id="sp">加载中…</p><button id="go" style="display:none">出发</button></div>
 <script>
 addEventListener("error",e=>{const p=document.getElementById("sp");if(p)p.textContent+="\n\n出错了："+(e.message||e);});
@@ -307,25 +313,28 @@ let py = role.mode === "swim" ? seaLevel + 0.2 : ground(px, pz), vy = 0, yaw = M
 const keys = {}; addEventListener("keydown", e => keys[e.code] = true); addEventListener("keyup", e => keys[e.code] = false);
 let jx = 0, jz = 0, upHeld = false, downHeld = false;
 const joy = document.getElementById("joy"), knob = document.getElementById("knob");
-let joyId = null, lookId = null, lx = 0, ly = 0;
+let joyId = null, lookId = null, lx = 0, ly = 0, tap0 = null;
 function joyMove(t) { const r = joy.getBoundingClientRect(); let dx = t.clientX - r.left - 60, dy = t.clientY - r.top - 60; const l = Math.hypot(dx, dy); if (l > 45) { dx *= 45 / l; dy *= 45 / l; }
   knob.style.left = 35 + dx + "px"; knob.style.top = 35 + dy + "px"; jx = dx / 45; jz = dy / 45; }
 addEventListener("touchstart", e => { for (const t of e.changedTouches) {
   const el = document.elementFromPoint(t.clientX, t.clientY);
   if (el && (el.id === "joy" || el.id === "knob")) { joyId = t.identifier; joyMove(t); }
   else if (el && el.id === "up") upHeld = true; else if (el && el.id === "down") downHeld = true;
-  else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; } } }, { passive: true });
+  else if (el && el.id === "web") toggleWeb();
+  else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; tap0 = { x: t.clientX, y: t.clientY, t: performance.now() }; } } }, { passive: true });
 addEventListener("touchmove", e => { for (const t of e.changedTouches) {
   if (t.identifier === joyId) joyMove(t);
   else if (t.identifier === lookId) { yaw -= (t.clientX - lx) * 0.006; pitch = Math.max(-1.4, Math.min(1.4, pitch - (t.clientY - ly) * 0.006)); lx = t.clientX; ly = t.clientY; } } }, { passive: true });
 addEventListener("touchend", e => { for (const t of e.changedTouches) {
   if (t.identifier === joyId) { joyId = null; jx = jz = 0; knob.style.left = knob.style.top = "35px"; }
-  if (t.identifier === lookId) lookId = null; }
+  if (t.identifier === lookId) { lookId = null; if (tap0 && Math.hypot(t.clientX - tap0.x, t.clientY - tap0.y) < 12 && performance.now() - tap0.t < 300) shootAt(t.clientX, t.clientY); tap0 = null; } }
   if (![...e.touches].some(t => { const el = document.elementFromPoint(t.clientX, t.clientY); return el && el.id === "up"; })) upHeld = false;
   if (![...e.touches].some(t => { const el = document.elementFromPoint(t.clientX, t.clientY); return el && el.id === "down"; })) downHeld = false; });
-let mdown = false; renderer.domElement.addEventListener("mousedown", e => { mdown = true; lx = e.clientX; ly = e.clientY; });
-addEventListener("mouseup", () => mdown = false);
-addEventListener("mousemove", e => { if (!mdown) return; yaw -= (e.clientX - lx) * 0.005; pitch = Math.max(-1.4, Math.min(1.4, pitch - (e.clientY - ly) * 0.005)); lx = e.clientX; ly = e.clientY; });
+let mdown = false, mdrag = 0; renderer.domElement.addEventListener("mousedown", e => { mdown = true; mdrag = 0; lx = e.clientX; ly = e.clientY; });
+addEventListener("mouseup", e => { if (mdown && mdrag < 6 && e.target === renderer.domElement) shootAt(e.clientX, e.clientY); mdown = false; });
+document.getElementById("web").onclick = e => { if (!("ontouchstart" in window)) toggleWeb(); };
+addEventListener("keydown", e => { if (e.code === "KeyQ") toggleWeb(); if (e.code === "KeyF" && webMode) shootAt(innerWidth / 2, innerHeight / 2); });
+addEventListener("mousemove", e => { if (!mdown) return; mdrag += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly); yaw -= (e.clientX - lx) * 0.005; pitch = Math.max(-1.4, Math.min(1.4, pitch - (e.clientY - ly) * 0.005)); lx = e.clientX; ly = e.clientY; });
 for (const id of ["up", "down"]) { const b = document.getElementById(id); b.onmousedown = () => id === "up" ? upHeld = true : downHeld = true; b.onmouseup = b.onmouseleave = () => id === "up" ? upHeld = false : downHeld = false; }
 
 const hud = document.getElementById("hud"), card = document.getElementById("card"), toast = document.getElementById("toast");
@@ -351,6 +360,81 @@ function drawMap() { mg.drawImage(mapBase, 0, 0);
 let started = false; goBtn.onclick = () => { document.getElementById("start").style.display = "none"; started = true; };
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
+// ---------- 蜘蛛侠模式（借鉴 terryHu7/homecraft 的 web-zip）----------
+// 打开 🕸️ 后点屏幕：从手里射出蛛丝粘住 40 格内看得见的方块，先被沿蛛丝猛拉过去（先快后慢），
+// 松手后顺势翻上那一格的顶面；打中侧面就像抓住墙沿一样翻上去。微生物只能在水里荡。
+const REACH = 40, aimEl = document.getElementById("aim"), webBtn = document.getElementById("web");
+let webMode = false, zip = null, aimCheck = 0;
+const webLine = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xf4f6f8, transparent: true, opacity: 0.9, fog: false }));
+webLine.visible = false; webLine.frustumCulled = false; scene.add(webLine);
+function toggleWeb(on = !webMode) { webMode = on; webBtn.classList.toggle("on", on); aimEl.style.display = on ? "block" : "none";
+  say(on ? (role.mode === "swim" ? "蜘蛛侠模式：点水里的地方，用蛛丝荡过去" : "蜘蛛侠模式：点远处的方块，用蛛丝飞过去") : "蜘蛛侠模式关闭"); }
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function webTarget(cx, cy) {
+  if (zip) return null;
+  ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const o = ray.ray.origin, dv = ray.ray.direction, swim = role.mode === "swim";
+  let prev = o.clone();
+  for (let t = 0.3; t <= REACH; t += 0.12) {
+    const p = o.clone().addScaledVector(dv, t), cx_ = Math.floor(p.x), cz_ = Math.floor(p.z);
+    if (cx_ < 0 || cz_ < 0 || cx_ >= N || cz_ >= N) return null;
+    const g = H[cx_][cz_];
+    if (!swim && seaLevel && g <= seaLevel && p.y < seaLevel + 0.85 && prev.y >= seaLevel + 0.85) return { bad: "蛛丝粘不住水面" };
+    if (swim && seaLevel && p.y > seaLevel + 0.85 && dv.y > 0) return { bad: "微生物出不了水" };
+    if (p.y < g) {
+      const pcx = Math.floor(prev.x), pcz = Math.floor(prev.z), top = prev.y >= g - 0.02 || (pcx === cx_ && pcz === cz_);
+      const n = top ? [0, 1, 0] : [Math.sign(pcx - cx_), 0, Math.sign(pcz - cz_)];
+      if (t < 1.5) return null;
+      if (swim) { if (!isWater(cx_ + 0.5, cz_ + 0.5)) return { bad: "那里是陆地" };
+        return { anchor: p, normal: n, x: cx_ + 0.5, z: cz_ + 0.5, y: Math.min(seaLevel - 0.2, Math.max(g + 0.05, p.y + 0.3)), ledge: false }; }
+      if (lavaCells.has(cx_ + "," + cz_) && !role.heatProof) return { bad: "那是岩浆，别去" };
+      return { anchor: p, normal: n, x: cx_ + 0.5, z: cz_ + 0.5, y: g, ledge: !top };
+    }
+    prev = p;
+  }
+  return null;
+}
+function shootAt(cx, cy) {
+  if (!webMode || !started) return;
+  const tg = webTarget(cx, cy);
+  if (!tg) { say("太远了，蛛丝够不着（" + REACH + " 格内）"); return; }
+  if (tg.bad) { say(tg.bad); return; }
+  const a = tg.anchor, ledge = tg.ledge;
+  const end = ledge ? { x: a.x + tg.normal[0] * 0.45, y: tg.y - role.eye, z: a.z + tg.normal[2] * 0.45 } : { x: tg.x, y: tg.y + (tg.y > py + 0.5 ? 0.8 : 0.05), z: tg.z };
+  const dist = Math.hypot(end.x - px, end.y - py, end.z - pz);
+  zip = { from: { x: px, y: py, z: pz }, end, to: tg, t: -0.1, pull: Math.min(1.6, Math.max(0.22, dist / 30)), hop: ledge ? 0.34 : 0.14,
+    peak: Math.max(tg.y, a.y) + 1, ledge, released: false, anchor: a.clone() };
+  vy = 0; yaw = Math.atan2(-(end.x - px), -(end.z - pz)) * 0.25 + yaw * 0.75;
+  thwip();
+}
+let actx = null;
+function thwip() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const t = actx.currentTime;
+  const len = actx.sampleRate * 0.18, buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain(); src.buffer = buf;
+  f.type = "bandpass"; f.Q.value = 2.5; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(700, t + 0.18);
+  g.gain.setValueAtTime(0.35, t); src.connect(f); f.connect(g); g.connect(actx.destination); src.start(t); } catch (e) {} }
+function zipping(dt) {
+  zip.t += dt; if (zip.t <= 0) return;
+  const { from, end, to } = zip;
+  if (zip.t < zip.pull) { const u = zip.t / zip.pull, e = 1 - (1 - u) * (1 - u);    // 起步最快，快到时放慢
+    px = from.x + (end.x - from.x) * e; pz = from.z + (end.z - from.z) * e; py = from.y + (end.y - from.y) * e; return; }
+  zip.released = true;
+  const u = Math.min(1, (zip.t - zip.pull) / zip.hop);
+  if (zip.ledge) { const across = THREE.MathUtils.smoothstep(u, 0.35, 0.9);      // 先翻过沿口，再落到顶面
+    px = end.x + (to.x - end.x) * across; pz = end.z + (to.z - end.z) * across;
+    py = u < 0.6 ? end.y + (zip.peak - end.y) * Math.sin(u / 0.6 * Math.PI / 2) : zip.peak + (to.y - zip.peak) * ((u - 0.6) / 0.4) ** 2; }
+  else { px = end.x + (to.x - end.x) * u; pz = end.z + (to.z - end.z) * u; py = end.y + (to.y - end.y) * u * u; }
+  if (u >= 1) { py = to.y; vy = 0; zip = null; }
+}
+const handAt = new THREE.Vector3();
+function drawWeb() {
+  if (!zip || zip.released) { webLine.visible = false; return; }
+  handAt.set(0.32, -0.32, -0.5).applyQuaternion(camera.quaternion).add(camera.position);
+  const reach = zip.t < 0 ? 1 + zip.t / 0.1 : 1, endP = handAt.clone().lerp(zip.anchor, Math.max(0.02, reach)), len = handAt.distanceTo(endP);
+  webLine.position.copy(handAt).add(endP).multiplyScalar(0.5); webLine.lookAt(endP); webLine.scale.set(0.035, 0.035, Math.max(0.01, len)); webLine.visible = len > 0.05;
+}
+
 const clock = new THREE.Clock(); let tAll = 0;
 function step(dt) {
   tAll += dt;
@@ -365,7 +449,8 @@ function step(dt) {
   const mv = fwd.multiplyScalar(fx).add(right.multiplyScalar(sx)); if (mv.length() > 1) mv.normalize();
   let nx = px + mv.x * sp * dt, nz = pz + mv.z * sp * dt;
   nx = Math.min(N - 0.5, Math.max(0.5, nx)); nz = Math.min(N - 0.5, Math.max(0.5, nz));
-  if (role.mode === "swim") {
+  if (zip) zipping(dt);
+  else if (role.mode === "swim") {
     if (!isWater(nx, nz)) { if (Math.random() < 0.02) say("这里是陆地，你只能在水里游"); }
     else { px = nx; pz = nz; }
     vy = (up ? 1.6 : 0) - (down ? 1.6 : 0) + Math.sin(tAll * 2) * 0.05; py += vy * dt;
@@ -385,6 +470,9 @@ function step(dt) {
   const bob = (role.mode === "walk" && mv.length() > 0.1 && py <= ground(px, pz) + 0.01) ? Math.sin(tAll * 10) * 0.04 : 0;
   camera.position.set(px, py + role.eye + bob, pz);
   camera.rotation.set(pitch, yaw, 0, "YXZ");
+  const fovT = zip && !zip.released && zip.t > 0 ? 86 : 72; if (Math.abs(camera.fov - fovT) > 0.1) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 8); camera.updateProjectionMatrix(); }
+  drawWeb();
+  if (webMode && tAll - aimCheck > 0.12) { aimCheck = tAll; const tg = webTarget(innerWidth / 2, innerHeight / 2); aimEl.classList.toggle("ok", !!tg && !tg.bad); }
   const submerged = seaLevel && camera.position.y < seaLevel + 0.85;
   if (submerged) { scene.background = deepCol; scene.fog.color.copy(deepCol); scene.fog.near = 2; scene.fog.far = 26; if (rain) rain.visible = false; }
   else { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = skyFog.near; scene.fog.far = skyFog.far; if (rain) rain.visible = true; }
