@@ -243,7 +243,44 @@ let trail = null;
 if (hasIcon("☄️")) { meteor = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false })); scene.add(meteor);
   trail = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(60 * 3), 3)), new THREE.PointsMaterial({ color: 0xffa040, size: 0.9, fog: false, transparent: true, opacity: 0.8 })); scene.add(trail); }
 let boltLine = null, boltT = 4;
-if (hasIcon("⚡")) { boltLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 8 }, () => new THREE.Vector3())), new THREE.LineBasicMaterial({ color: 0xfff7c0 })); boltLine.visible = false; scene.add(boltLine); }
+// 闪电：主干粗、越往下越细，带细枝杈；每段是白芯 + 外面一层加色发光壳，会连闪两三下，落点爆一圈火花、照亮四周，远处才传来雷声
+const boltCore = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, depthWrite: false });
+const boltGlow = new THREE.MeshBasicMaterial({ color: 0x9fc4ff, fog: false, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+const boltBox = new THREE.BoxGeometry(1, 1, 1); let boltLight = null, boltSpark = null, boltSparkV = [], boltFl = [];
+if (hasIcon("⚡")) { boltLine = new THREE.Group(); boltLine.visible = false; scene.add(boltLine);
+  boltLight = new THREE.PointLight(0xcfe0ff, 0, 60); scene.add(boltLight);
+  boltSpark = particles(120, 0xfff4b0, 0.18); boltSpark.material.blending = THREE.AdditiveBlending; for (let i = 0; i < 120; i++) boltSparkV.push({ p: null, v: [0, 0, 0] }); }
+function boltSeg(a, b, w) {
+  const len = a.distanceTo(b), mid = a.clone().add(b).multiplyScalar(0.5);
+  for (const [mat, k] of [[boltCore, 1], [boltGlow, 3.2]]) { const m = new THREE.Mesh(boltBox, mat); m.position.copy(mid); m.lookAt(b); m.scale.set(w * k, w * k, len + w * k * 0.5); m.frustumCulled = false; boltLine.add(m); }
+}
+function boltBranch(start, dir, len, w, depth) {   // 一路往下抖，粗细一段段变细，偶尔分叉
+  let p = start.clone(), steps = Math.max(3, Math.round(len / 1.6));
+  for (let i = 0; i < steps; i++) {
+    const n = p.clone().add(new THREE.Vector3(dir.x + (Math.random() - 0.5) * 1.6, -1, dir.z + (Math.random() - 0.5) * 1.6).normalize().multiplyScalar(len / steps * (0.7 + Math.random() * 0.6)));
+    const wi = w * (1 - i / steps * 0.6) * (0.75 + Math.random() * 0.5); boltSeg(p, n, wi);
+    if (depth < 2 && Math.random() < (depth ? 0.18 : 0.32)) boltBranch(n, new THREE.Vector3((Math.random() - 0.5) * 2.2, 0, (Math.random() - 0.5) * 2.2), len * (0.25 + Math.random() * 0.25), wi * 0.45, depth + 1);
+    p = n; if (p.y < 0) break; }
+  return p;
+}
+function strike(bx, bz) {
+  while (boltLine.children.length) boltLine.remove(boltLine.children[0]);
+  const gy = Math.max(ground(bx, bz), seaLevel ? seaLevel + 0.85 : 0), top = new THREE.Vector3(bx + (Math.random() - 0.5) * 8, 30, bz + (Math.random() - 0.5) * 8);
+  let p = top, w = 0.32;   // 主干：从云里直劈到地面
+  const steps = 12; for (let i = 1; i <= steps; i++) { const t = i / steps, n = new THREE.Vector3(top.x + (bx - top.x) * t + (i < steps ? (Math.random() - 0.5) * 2.4 : 0), top.y + (gy - top.y) * t, top.z + (bz - top.z) * t + (i < steps ? (Math.random() - 0.5) * 2.4 : 0));
+    const wi = w * (1.15 - t * 0.55) * (0.7 + Math.random() * 0.6); boltSeg(p, n, wi);
+    if (i < steps - 1 && Math.random() < 0.45) boltBranch(n, new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2), 4 + Math.random() * 7, wi * 0.5, 1);
+    p = n; }
+  boltLine.visible = true; boltLight.position.set(bx, gy + 4, bz);
+  boltFl = [0, 0.07, 0.16, 0.24, 0.42].map((t, i) => ({ t, on: i % 2 === 0 })); boltFl.t = 0;   // 亮-灭-亮-灭-再亮一下
+  boltSparkV.forEach(s => { s.p = [bx, gy + 0.1, bz]; const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 5; s.v = [Math.cos(a) * r, 3 + Math.random() * 6, Math.sin(a) * r]; });
+  const dist = Math.hypot(px - bx, pz - bz); flash.style.opacity = dist < 12 ? 0.7 : 0.45; thunder(dist);
+}
+function thunder(dist) { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const t = actx.currentTime + Math.min(2.5, dist / 12);
+  const len = actx.sampleRate * 2.2, buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0); let b = 0;
+  for (let i = 0; i < len; i++) { b = b * 0.97 + (Math.random() * 2 - 1) * 0.03; ch[i] = b * 6 * Math.pow(1 - i / len, 1.5) * (1 + (i < actx.sampleRate * 0.12 ? 2 : 0)); }
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain(); src.buffer = buf; f.type = "lowpass"; f.frequency.value = dist < 12 ? 900 : 350;
+  g.gain.value = Math.max(0.15, 0.9 - dist / 40); src.connect(f); f.connect(g); g.connect(actx.destination); src.start(t); } catch (e) {} }
 
 // ---------- 热泉与微生物群落 ----------
 const vents = [];
@@ -599,10 +636,14 @@ function step(dt) {
       else say("☄️ 轰！一块陨石落进了西南边的陨石坑"); } }
   if (intoSea) { waveT += dt; const r = 1 + waveT * 6; wave.scale.set(r, r, 1); wave.material.opacity = Math.max(0, 0.8 - waveT * 0.3);
     const a = spray.geometry.attributes.position.array; sprayV.forEach((v, i) => { if (!v.p) return; v[1] -= 15 * dt; v.p[0] += v[0] * dt; v.p[1] += v[1] * dt; v.p[2] += v[2] * dt; if (v.p[1] < MY) v.p[1] = -99; a[i * 3] = v.p[0]; a[i * 3 + 1] = v.p[1]; a[i * 3 + 2] = v.p[2]; }); spray.geometry.attributes.position.needsUpdate = true; }
-  if (boltLine) { boltT -= dt; if (boltT < 0) { boltT = 5 + Math.random() * 6; const bx = px + (Math.random() - 0.5) * 20, bz = pz + (Math.random() - 0.5) * 20;
-      const pts = []; for (let i = 0; i < 8; i++) pts.push(new THREE.Vector3(bx + (Math.random() - 0.5) * 1.5, 30 - i * (30 - Math.max(seaLevel, 1)) / 7, bz + (Math.random() - 0.5) * 1.5));
-      boltLine.geometry.setFromPoints(pts); boltLine.visible = true; flash.style.opacity = 0.6; }
-    if (boltT < 4.8) boltLine.visible = false; }
+  if (boltLine) { boltT -= dt; if (boltT < 0) { boltT = 5 + Math.random() * 6;
+      strike(Math.min(N - 1, Math.max(0, px + (Math.random() - 0.5) * 24)), Math.min(N - 1, Math.max(0, pz + (Math.random() - 0.5) * 24))); }
+    if (boltFl.length) { boltFl.t += dt; let on = false; for (const f of boltFl) if (boltFl.t >= f.t) on = f.on;
+      const fade = Math.max(0, 1 - boltFl.t / 0.6); boltLine.visible = on && fade > 0; boltCore.opacity = 0.6 + Math.random() * 0.4; boltGlow.opacity = (0.25 + Math.random() * 0.2) * (0.5 + fade);
+      boltLight.intensity = on ? 80 * fade : 0; if (boltFl.t > 0.6) { boltFl = []; boltLine.visible = false; boltLight.intensity = 0; } }
+    const a = boltSpark.geometry.attributes.position.array; boltSparkV.forEach((s, i) => { if (!s.p) { a[i * 3 + 1] = -99; return; } s.v[1] -= 18 * dt; s.p[0] += s.v[0] * dt; s.p[1] += s.v[1] * dt; s.p[2] += s.v[2] * dt;
+      if (s.p[1] < ground(Math.min(N - 1, Math.max(0, s.p[0])), Math.min(N - 1, Math.max(0, s.p[2])))) s.p = null; else { a[i * 3] = s.p[0]; a[i * 3 + 1] = s.p[1]; a[i * 3 + 2] = s.p[2]; } });
+    boltSpark.geometry.attributes.position.needsUpdate = true; }
   if (waterSurf) { const wa = waterSurf.geometry.attributes.position, arr = wa.array;
     for (let i = 0; i < arr.length; i += 3) arr[i + 2] = Math.sin(arr[i] * 0.7 + tAll * 1.6) * 0.06 + Math.cos(arr[i + 1] * 0.9 + tAll * 1.2) * 0.05; wa.needsUpdate = true; }
   clouds.children.forEach(c => { c.position.x += dt * 0.6; if (c.position.x > N * 1.4) c.position.x = -N * 0.4; });
