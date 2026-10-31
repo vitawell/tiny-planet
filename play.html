@@ -17,6 +17,8 @@ canvas{display:block}
 .btn{position:fixed;right:24px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:14px}
 #up{bottom:110px}#down{bottom:30px}
 #web{bottom:190px;font-size:26px}#web.on{background:rgba(255,70,70,.55);border-color:#fff}
+#fly{bottom:270px;font-size:26px}#fly.on{background:rgba(90,170,255,.6);border-color:#fff}
+#view{right:auto;left:24px;bottom:170px;width:52px;height:52px;font-size:13px}
 #aim{position:fixed;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid rgba(255,255,255,.55);border-radius:50%;pointer-events:none;display:none}
 #aim::after{content:"";position:absolute;left:10px;top:10px;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.7)}
 #aim.ok{border-color:#ff5050;box-shadow:0 0 8px #ff5050}#aim.ok::after{background:#ff5050}
@@ -41,6 +43,8 @@ canvas{display:block}
 <div class="btn" id="up">跳</div>
 <div class="btn" id="down" style="display:none">潜</div>
 <div class="btn" id="web" title="蜘蛛侠模式（Q）">🕸️</div>
+<div class="btn" id="fly" title="飞行模式（G）">🕊️</div>
+<div class="btn" id="view" title="切换第一/第三人称（V）">第三</div>
 <div id="aim"></div>
 <div id="start"><h1 id="st">豆星</h1><p id="sp">加载中…</p><button id="go" style="display:none">出发</button></div>
 <script>
@@ -79,7 +83,7 @@ if (!species.length) {
     eye: tiny ? 0.25 : top.kind === "虫" ? 0.35 : top.kind === "小兽" ? 0.7 : top.kind === "植物" ? 2.4 : sea ? 0.6 : 0.5,
     speed: tiny ? 1.6 : top.kind === "鱼" ? 5 : top.kind === "小兽" ? 4.5 : top.kind === "植物" ? 0.6 : 2.5,
     jump: top.kind === "小兽" ? 8 : top.kind === "虫" ? 4 : 0, heatProof: false,
-    intro: sea ? `你是 ${top.name}（${top.kind}），全星球数量最多的物种，约 ${top.pop}。只能待在水里，游去看看今天的事吧。`
+    intro: sea ? `你是 ${top.name}（${top.kind}），全星球数量最多的物种，约 ${top.pop}。从水里出发，想上岸、想飞都可以。`
                : `你是 ${top.name}（${top.kind}），全星球数量最多的物种，约 ${top.pop}。在陆地上走走，看看今天的事。` };
   if (top.kind === "植物") role.intro += "（植物走得很慢，这很正常）";
 }
@@ -87,8 +91,8 @@ document.getElementById("st").textContent = `${d.world || "豆星"} · ${label}`
 document.getElementById("sp").textContent = role.intro + `\n\n右上角小地图上有 ${events.length} 个事件图标，走到那里就能看到当天发生了什么。`;
 document.getElementById("sp").style.whiteSpace = "pre-line";
 const goBtn = document.getElementById("go"); goBtn.style.display = "block";
-if (role.mode === "swim") { document.getElementById("up").textContent = "浮"; document.getElementById("down").style.display = "flex"; }
-else if (!role.jump) document.getElementById("up").style.display = "none";
+role.jump = role.jump || 5;   // 不再按物种限制活动范围：谁都能跳、能游、能上岸
+const upBtn = document.getElementById("up"), downBtn = document.getElementById("down"); let btnState = "";
 
 // ---------- 地形：固定种子，每天只变海面和颜色 ----------
 const N = 48;
@@ -325,6 +329,7 @@ addEventListener("touchstart", e => { for (const t of e.changedTouches) {
   if (el && (el.id === "joy" || el.id === "knob")) { joyId = t.identifier; joyMove(t); }
   else if (el && el.id === "up") upHeld = true; else if (el && el.id === "down") downHeld = true;
   else if (el && el.id === "web") toggleWeb();
+  else if (el && el.id === "fly") toggleFly(); else if (el && el.id === "view") toggleView();
   else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; tap0 = { x: t.clientX, y: t.clientY, t: performance.now() }; } } }, { passive: true });
 addEventListener("touchmove", e => { for (const t of e.changedTouches) {
   if (t.identifier === joyId) joyMove(t);
@@ -337,7 +342,10 @@ addEventListener("touchend", e => { for (const t of e.changedTouches) {
 let mdown = false, mdrag = 0; renderer.domElement.addEventListener("mousedown", e => { mdown = true; mdrag = 0; lx = e.clientX; ly = e.clientY; });
 addEventListener("mouseup", e => { if (mdown && mdrag < 6 && e.target === renderer.domElement) shootAt(e.clientX, e.clientY); mdown = false; });
 document.getElementById("web").onclick = e => { if (!("ontouchstart" in window)) toggleWeb(); };
-addEventListener("keydown", e => { if (e.code === "KeyQ") toggleWeb(); if (e.code === "KeyF" && webMode) shootAt(innerWidth / 2, innerHeight / 2); });
+document.getElementById("fly").onclick = e => { if (!("ontouchstart" in window)) toggleFly(); };
+document.getElementById("view").onclick = e => { if (!("ontouchstart" in window)) toggleView(); };
+addEventListener("wheel", e => { camDist = Math.max(1.5, Math.min(14, camDist * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: true });
+addEventListener("keydown", e => { if (e.code === "KeyQ") toggleWeb(); if (e.code === "KeyG") toggleFly(); if (e.code === "KeyV") toggleView(); if (e.code === "KeyF" && webMode) shootAt(innerWidth / 2, innerHeight / 2); });
 addEventListener("mousemove", e => { if (!mdown) return; mdrag += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly); yaw -= (e.clientX - lx) * 0.005; pitch = Math.max(-1.4, Math.min(1.4, pitch - (e.clientY - ly) * 0.005)); lx = e.clientX; ly = e.clientY; });
 for (const id of ["up", "down"]) { const b = document.getElementById(id); b.onmousedown = () => id === "up" ? upHeld = true : downHeld = true; b.onmouseup = b.onmouseleave = () => id === "up" ? upHeld = false : downHeld = false; }
 
@@ -372,7 +380,7 @@ addEventListener("touchstart", skipIntro, { passive: true }); addEventListener("
 const eyeQ = new THREE.Quaternion(), introE = new THREE.Euler();
 function introCam(dt) {
   if (!intro) return; intro.t += dt; const u = Math.min(1, intro.t / INTRO_T), e = u * u * (3 - 2 * u);
-  const to = camera.position.clone(); eyeQ.setFromEuler(introE.set(pitch, yaw, 0, "YXZ"));
+  const to = camera.position.clone(); eyeQ.copy(camera.quaternion);
   camera.position.lerpVectors(introFrom, to, e); camera.position.y += Math.sin(u * Math.PI) * 6;   // 先抬一点再扎下去
   camera.quaternion.slerpQuaternions(introQ, eyeQ, THREE.MathUtils.smoothstep(u, 0.15, 0.95));
   if (!seaLevel || camera.position.y >= seaLevel + 0.85) { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = skyFog.near; scene.fog.far = Math.max(skyFog.far, 140 * (1 - e)); }
@@ -388,26 +396,23 @@ let webMode = false, zip = null, aimCheck = 0;
 const webLine = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xf4f6f8, transparent: true, opacity: 0.9, fog: false }));
 webLine.visible = false; webLine.frustumCulled = false; scene.add(webLine);
 function toggleWeb(on = !webMode) { webMode = on; webBtn.classList.toggle("on", on); aimEl.style.display = on ? "block" : "none";
-  say(on ? (role.mode === "swim" ? "蜘蛛侠模式：点水里的地方，用蛛丝荡过去" : "蜘蛛侠模式：点远处的方块，用蛛丝飞过去") : "蜘蛛侠模式关闭"); }
+  say(on ? "蜘蛛侠模式：点远处的方块，用蛛丝飞过去" : "蜘蛛侠模式关闭"); }
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function webTarget(cx, cy) {
   if (zip) return null;
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  const o = ray.ray.origin, dv = ray.ray.direction, swim = role.mode === "swim";
+  const o = ray.ray.origin, dv = ray.ray.direction, swim = seaLevel && camera.position.y < seaLevel + 0.85;
   let prev = o.clone();
   for (let t = 0.3; t <= REACH; t += 0.12) {
     const p = o.clone().addScaledVector(dv, t), cx_ = Math.floor(p.x), cz_ = Math.floor(p.z);
     if (cx_ < 0 || cz_ < 0 || cx_ >= N || cz_ >= N) return null;
     const g = H[cx_][cz_];
-    if (!swim && seaLevel && g <= seaLevel && p.y < seaLevel + 0.85 && prev.y >= seaLevel + 0.85) return { bad: "蛛丝粘不住水面" };
-    if (swim && seaLevel && p.y > seaLevel + 0.85 && dv.y > 0) return { bad: "微生物出不了水" };
     if (p.y < g) {
       const pcx = Math.floor(prev.x), pcz = Math.floor(prev.z), top = prev.y >= g - 0.02 || (pcx === cx_ && pcz === cz_);
       const n = top ? [0, 1, 0] : [Math.sign(pcx - cx_), 0, Math.sign(pcz - cz_)];
       if (t < 1.5) return null;
-      if (swim) { if (!isWater(cx_ + 0.5, cz_ + 0.5)) return { bad: "那里是陆地" };
+      if (isWater(cx_ + 0.5, cz_ + 0.5)) {   // 打到海底：拉进水里
         return { anchor: p, normal: n, x: cx_ + 0.5, z: cz_ + 0.5, y: Math.min(seaLevel - 0.2, Math.max(g + 0.05, p.y + 0.3)), ledge: false }; }
-      if (lavaCells.has(cx_ + "," + cz_) && !role.heatProof) return { bad: "那是岩浆，别去" };
       return { anchor: p, normal: n, x: cx_ + 0.5, z: cz_ + 0.5, y: g, ledge: !top };
     }
     prev = p;
@@ -424,7 +429,7 @@ function shootAt(cx, cy) {
   const dist = Math.hypot(end.x - px, end.y - py, end.z - pz);
   zip = { from: { x: px, y: py, z: pz }, end, to: tg, t: -0.1, pull: Math.min(1.6, Math.max(0.22, dist / 30)), hop: ledge ? 0.34 : 0.14,
     peak: Math.max(tg.y, a.y) + 1, ledge, released: false, anchor: a.clone() };
-  vy = 0; yaw = Math.atan2(-(end.x - px), -(end.z - pz)) * 0.25 + yaw * 0.75;
+  vy = 0; if (flying) toggleFly(false); yaw = Math.atan2(-(end.x - px), -(end.z - pz)) * 0.25 + yaw * 0.75;
   thwip();
 }
 let actx = null;
@@ -450,10 +455,58 @@ function zipping(dt) {
 const handAt = new THREE.Vector3();
 function drawWeb() {
   if (!zip || zip.released) { webLine.visible = false; return; }
-  handAt.set(0.32, -0.32, -0.5).applyQuaternion(camera.quaternion).add(camera.position);
+  if (thirdP) handAt.set(px, py + role.eye * 0.85, pz); else handAt.set(0.32, -0.32, -0.5).applyQuaternion(camera.quaternion).add(camera.position);
   const reach = zip.t < 0 ? 1 + zip.t / 0.1 : 1, endP = handAt.clone().lerp(zip.anchor, Math.max(0.02, reach)), len = handAt.distanceTo(endP);
   webLine.position.copy(handAt).add(endP).multiplyScalar(0.5); webLine.lookAt(endP); webLine.scale.set(0.035, 0.035, Math.max(0.01, len)); webLine.visible = len > 0.05;
 }
+
+// ---------- 看得见自己：方块小人（按物种换造型）+ 第三人称跟随镜头 ----------
+function makeAvatar() {
+  const g = new THREE.Group(), s = Math.max(0.35, role.eye * 1.1);   // 身高大约和原来的视线高度一样
+  const M = c => new THREE.MeshLambertMaterial({ color: c });
+  const box = (w, h, d, c, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w * s, h * s, d * s), M(c)); m.position.set(x * s, y * s, z * s); g.add(m); return m; };
+  const eyes = (y, z, gap = 0.12, sz = 0.07) => { box(sz, sz, 0.02, 0x111111, -gap, y, z); box(sz, sz, 0.02, 0x111111, gap, y, z); };
+  const k = role.kind, legs = [];
+  if (k === "石") { box(0.55, 0.5, 0.35, 0x8a817c, 0, 0.45, 0); box(0.4, 0.3, 0.35, 0x9a918c, 0, 0.85, 0); eyes(0.88, -0.18);
+    legs.push(box(0.18, 0.2, 0.2, 0x6f6763, -0.14, 0.1, 0), box(0.18, 0.2, 0.2, 0x6f6763, 0.14, 0.1, 0)); }
+  else if (k === "微生物" || k === "藻类") { const c = k === "藻类" ? 0x3fbf7a : 0x9fd8ff;
+    box(0.7, 0.55, 0.7, c, 0, 0.45, 0); box(0.5, 0.3, 0.5, c, 0, 0.8, 0); eyes(0.55, -0.36, 0.14, 0.1);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; legs.push(box(0.06, 0.25, 0.06, 0xe8f6ff, Math.sin(a) * 0.36, 0.15, Math.cos(a) * 0.36)); } }
+  else if (k === "鱼" || k === "软体") { box(0.4, 0.4, 0.9, 0xf0a040, 0, 0.45, 0); box(0.35, 0.45, 0.06, 0xd07a20, 0, 0.45, 0.5); eyes(0.55, -0.46, 0.14); }
+  else if (k === "虫") { for (let i = 0; i < 4; i++) box(0.32, 0.28, 0.3, i % 2 ? 0x6fa84a : 0x86c25a, 0, 0.18, i * 0.28 - 0.3); eyes(0.25, -0.46, 0.08); }
+  else if (k === "植物") { box(0.12, 0.9, 0.12, 0x3f7d3a, 0, 0.45, 0); box(0.5, 0.08, 0.25, 0x5fbf4a, -0.2, 0.7, 0); box(0.5, 0.08, 0.25, 0x5fbf4a, 0.2, 0.55, 0);
+    box(0.35, 0.3, 0.35, 0xff8fb0, 0, 0.98, 0); eyes(1.0, -0.18, 0.08); }
+  else { const c = k === "小兽" ? 0xc8915a : 0xb0a0d0; box(0.5, 0.4, 0.75, c, 0, 0.5, 0); box(0.42, 0.38, 0.4, c, 0, 0.82, -0.38);
+    box(0.1, 0.18, 0.08, c, -0.13, 1.08, -0.38); box(0.1, 0.18, 0.08, c, 0.13, 1.08, -0.38); eyes(0.86, -0.59, 0.1);
+    for (const [x, z] of [[-0.17, -0.25], [0.17, -0.25], [-0.17, 0.25], [0.17, 0.25]]) legs.push(box(0.12, 0.3, 0.12, 0x8a6038, x, 0.15, z)); }
+  g.userData.legs = legs; scene.add(g); return g;
+}
+const avatar = makeAvatar();
+let thirdP = true, camDist = 2.2 + role.eye * 2.2, camNow = camDist;
+const viewBtn = document.getElementById("view");
+function toggleView(on = !thirdP) { thirdP = on; viewBtn.textContent = on ? "第三" : "第一"; say(on ? "第三人称：看得见自己（滚轮/双指远近）" : "第一人称"); }
+const camTgt = new THREE.Vector3(), camDir = new THREE.Vector3();
+function placeCamera(dt, bob) {
+  camera.rotation.set(pitch, yaw, 0, "YXZ");
+  if (!thirdP) { avatar.visible = false; camera.position.set(px, py + role.eye + bob, pz); return; }
+  avatar.visible = true; camTgt.set(px, py + role.eye * 0.9 + 0.3, pz);
+  camera.getWorldDirection(camDir);
+  let d = 0.4;   // 镜头往后退，碰到地形就停在前面，免得钻进山里
+  for (; d < camDist; d += 0.2) { const x = camTgt.x - camDir.x * d, y = camTgt.y - camDir.y * d, z = camTgt.z - camDir.z * d;
+    if (y < ground(Math.min(N - 1, Math.max(0, x)), Math.min(N - 1, Math.max(0, z))) + 0.25) break; }
+  camNow = d < camNow ? d : camNow + (d - camNow) * Math.min(1, dt * 4);
+  camera.position.copy(camTgt).addScaledVector(camDir, -camNow);
+}
+let faceYaw = yaw;
+function poseAvatar(dt, moving, swimming) {
+  if (moving) faceYaw += (((yaw - faceYaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 10);
+  avatar.position.set(px, py, pz); avatar.rotation.set(flying ? -0.35 : swimming ? -0.2 : 0, faceYaw, 0);
+  avatar.userData.legs.forEach((l, i) => l.rotation.x = moving ? Math.sin(tAll * 12 + i * Math.PI) * 0.6 : 0);
+}
+// 飞行模式：不受重力，跳/升往上，潜/降往下；碰地形就贴着飞过去
+let flying = false; const flyBtn = document.getElementById("fly");
+function toggleFly(on = !flying) { flying = on; flyBtn.classList.toggle("on", on); vy = 0; if (on) py += 0.6; say(on ? "飞行模式：按“升/降”（空格/Shift）上下" : "飞行模式关闭"); }
+const FLY_TOP = 48;
 
 const clock = new THREE.Clock(); let tAll = 0;
 function step(dt) {
@@ -463,33 +516,42 @@ function step(dt) {
   let sx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + jx;
   const up = upHeld || keys.Space, down = downHeld || keys.ShiftLeft;
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-  let sp = role.speed; const wet = isWater(px, pz) && py < seaLevel + 0.9;
-  if (role.mode === "walk" && wet) sp *= 0.5;
-  if (raining && role.mode === "walk") sp *= 0.9;
+  let sp = role.speed; const native = role.mode === "swim";
+  const inWater = isWater(px, pz) && py < seaLevel + 0.6;
+  if (flying) sp = Math.max(6, sp * 2.2);
+  else if (inWater && !native) sp *= 0.6;           // 陆上物种也能游，只是慢点
+  else if (!inWater && native) sp = Math.max(1.4, sp * 0.8);   // 水里物种也能上岸
+  if (raining && !inWater && !flying) sp *= 0.9;
   const mv = fwd.multiplyScalar(fx).add(right.multiplyScalar(sx)); if (mv.length() > 1) mv.normalize();
   let nx = px + mv.x * sp * dt, nz = pz + mv.z * sp * dt;
   nx = Math.min(N - 0.5, Math.max(0.5, nx)); nz = Math.min(N - 0.5, Math.max(0.5, nz));
   if (zip) zipping(dt);
-  else if (role.mode === "swim") {
-    if (!isWater(nx, nz)) { if (Math.random() < 0.02) say("这里是陆地，你只能在水里游"); }
-    else { px = nx; pz = nz; }
-    vy = (up ? 1.6 : 0) - (down ? 1.6 : 0) + Math.sin(tAll * 2) * 0.05; py += vy * dt;
-    const g = ground(px, pz); py = Math.max(g + 0.05, Math.min(seaLevel + (iceCells.has(Math.floor(px) + "," + Math.floor(pz)) ? 0.5 - role.eye : 0.55), py));
+  else if (flying) {
+    const g1 = ground(nx, nz); px = nx; pz = nz; if (g1 + 0.05 > py) py += Math.min(g1 + 0.05 - py, 8 * dt) ; // 迎面是山就抬头飞上去
+    vy = (up ? 5 : 0) - (down ? 5 : 0); py += vy * dt;
+    py = Math.min(FLY_TOP, Math.max(Math.max(ground(px, pz), seaLevel && isWater(px, pz) ? seaLevel - 3 : 0) + 0.05, py));
+  } else if (inWater) {
+    const g1 = ground(nx, nz); if (g1 <= py + 1.01) { px = nx; pz = nz; if (g1 > py) py = g1; }   // 游到岸边自动爬上去
+    vy = (up ? 1.8 : 0) - (down ? 1.8 : 0) + Math.sin(tAll * 2) * 0.05; py += vy * dt;
+    if (isWater(px, pz)) { const g = ground(px, pz); py = Math.max(g + 0.05, Math.min(seaLevel + (iceCells.has(Math.floor(px) + "," + Math.floor(pz)) ? 0.5 - role.eye : 0.55), py)); }
   } else {
     const g1 = ground(nx, nz);
     if (g1 <= py + 1.01) { px = nx; pz = nz; if (g1 > py) py = g1; }   // 一格台阶自动迈上去
-    else if (role.jump) say("太高了，跳上去"); else say("这里太高，绕过去吧");
+    else say("太高了，跳上去，或者飞过去");
     const g = ground(px, pz);
-    if (py <= g + 0.01 && up && role.jump) vy = role.jump;
+    if (py <= g + 0.01 && up) vy = role.jump;
     vy -= 20 * dt; py += vy * dt; if (py < g) { py = g; vy = 0; }
     if (role.kind === "小兽" && py <= g + 0.01 && mv.length() > 0.2) vy = 3.5; // 蹦着走
   }
+  const swimNow = !flying && isWater(px, pz) && py < seaLevel + 0.6;
+  const st = flying ? "fly" : swimNow ? "swim" : "walk";
+  if (st !== btnState) { btnState = st; upBtn.textContent = st === "fly" ? "升" : st === "swim" ? "浮" : "跳"; downBtn.textContent = st === "fly" ? "降" : "潜"; downBtn.style.display = st === "walk" ? "none" : "flex"; }
   const onLava = lavaCells.has(Math.floor(px) + "," + Math.floor(pz)) && py < ground(px, pz) + 0.2;
-  heat.style.opacity = onLava ? (role.heatProof ? 0.35 : 0.8) : (hot > 0.3 && role.mode === "walk" ? hot * 0.25 : 0);
-  if (onLava && !role.heatProof) say("太烫了！快离开岩浆");
-  const bob = (role.mode === "walk" && mv.length() > 0.1 && py <= ground(px, pz) + 0.01) ? Math.sin(tAll * 10) * 0.04 : 0;
-  camera.position.set(px, py + role.eye + bob, pz);
-  camera.rotation.set(pitch, yaw, 0, "YXZ");
+  heat.style.opacity = onLava ? (role.heatProof ? 0.35 : 0.8) : (hot > 0.3 && !isWater(px, pz) ? hot * 0.25 : 0);
+  if (onLava && !role.heatProof && Math.random() < 0.02) say("好烫！岩浆上别待太久");
+  const bob = (st === "walk" && mv.length() > 0.1 && py <= ground(px, pz) + 0.01) ? Math.sin(tAll * 10) * 0.04 : 0;
+  poseAvatar(dt, mv.length() > 0.1 || !!zip, st === "swim");
+  placeCamera(dt, bob);
   const fovT = zip && !zip.released && zip.t > 0 ? 86 : 72; if (Math.abs(camera.fov - fovT) > 0.1) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 8); camera.updateProjectionMatrix(); }
   drawWeb();
   if (webMode && tAll - aimCheck > 0.12) { aimCheck = tAll; const tg = webTarget(innerWidth / 2, innerHeight / 2); aimEl.classList.toggle("ok", !!tg && !tg.bad); }
