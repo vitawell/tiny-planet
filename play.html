@@ -219,7 +219,7 @@ moon.position.set(-30, 45, -40); scene.add(moon);
 // 粒子工具
 function particles(n, color, size) {
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-  const p = new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.8 })); scene.add(p); return p;
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, opacity: 0.8 })); p.frustumCulled = false; scene.add(p); return p;   // 粒子每帧都在动，包围球只在第一帧算（那时全在原点），不关剔除就会“换个角度就消失”
 }
 const smoke = particles(160, 0xb9b9c0, 1.3), smokeState = [];
 for (let i = 0; i < 160; i++) smokeState.push({ t: Math.random() * 6 });
@@ -241,7 +241,7 @@ wave.rotation.x = -Math.PI / 2; wave.position.set(MX + 0.5, MY + 0.03, MZ + 0.5)
 const spray = particles(120, 0xeaf6ff, 0.25), sprayV = []; for (let i = 0; i < 120; i++) sprayV.push([0, -99, 0]);
 let trail = null;
 if (hasIcon("☄️")) { meteor = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false })); scene.add(meteor);
-  trail = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(60 * 3), 3)), new THREE.PointsMaterial({ color: 0xffa040, size: 0.9, fog: false, transparent: true, opacity: 0.8 })); scene.add(trail); }
+  trail = new THREE.Points(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(60 * 3), 3)), new THREE.PointsMaterial({ color: 0xffa040, size: 0.9, fog: false, transparent: true, opacity: 0.8 })); trail.frustumCulled = false; scene.add(trail); }
 let boltLine = null, boltT = 4;
 // 闪电：主干粗、越往下越细，带细枝杈；每段是白芯 + 外面一层加色发光壳，会连闪两三下，落点爆一圈火花、照亮四周，远处才传来雷声
 const boltCore = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, depthWrite: false });
@@ -298,7 +298,7 @@ const microbe = species.find(s => s.kind === "微生物");
 let colony = null, colState = [];
 if (microbe && vents.length) {
   const n = Math.min(160, 30 + Math.round((parseFloat(microbe.pop) || 50) * 1.2));
-  colony = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xa8ff9a }), n); scene.add(colony);
+  colony = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xa8ff9a }), n); colony.frustumCulled = false; scene.add(colony);
   for (let i = 0; i < n; i++) { const [vx, vz] = vents[i % vents.length]; colState.push({ x: vx + 0.5, z: vz + 0.5, y: H[vx][vz] + 0.4, r: 0.4 + Math.random() * 1.6, a: Math.random() * 6.28, h: Math.random() * 2, s: 0.3 + Math.random() }); }
 }
 
