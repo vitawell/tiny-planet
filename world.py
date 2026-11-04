@@ -98,6 +98,12 @@ def simulate(s, rng):
     if raining:
         e["ocean"] = clamp(e["ocean"] + rng.randint(2, 5), 0, 70)
     lightning = raining and rng.random() < 0.5
+    # 雨势：用独立随机数决定，不打乱主推演的随机序列；打雷的日子更容易是暴雨
+    if raining:
+        rr = random.Random(s["seed"] + d * 31).random()
+        e["rain"] = 3 if rr < (0.55 if lightning else 0.15) else 2 if rr < 0.7 else 1
+    else:
+        e["rain"] = 0
 
     # ---------- 冬季冰冻-解冻 ----------
     # 依据：Shinoda et al., bioRxiv 2026, doi:10.64898/2026.10.13.758973
@@ -148,7 +154,7 @@ def simulate(s, rng):
     elif rng.random() < 0.25:
         ev.append(("🌋", "咕噜火山", "打了个嗝，喷出一小股热气。"))
     if raining:
-        ev.append(("🌧️", "第一场雨" if e["ocean"] <= 5 else "雨", "落在发烫的岩石上，嘶嘶冒白气。" if e["temp"] > 60 else f"下了一整天，海洋覆盖到 {e['ocean']}%。"))
+        ev.append(("🌧️", "第一场雨" if e["ocean"] <= 5 else "雨", "落在发烫的岩石上，嘶嘶冒白气。" if e["temp"] > 60 else ["", "小雨", "中雨", "暴雨"][e["rain"]] + f"下了一整天，海洋覆盖到 {e['ocean']}%。"))
     if lightning:
         ev.append(("⚡", "闪电", "劈进浅海，水里多了一些奇怪的小分子。" if e["ocean"] > 20 else "照亮了光秃秃的山脊。"))
 
@@ -462,6 +468,7 @@ def main():
         "world": s["world"], "day": s["day"], "day_from": day_from, "day_to": day_to, "day_label": label,
         "issue": s["issue"], "sim_days": sims, "more_tomorrow": bool(s.get("backlog")),
         "date": bj_today, "era": ERAS[s["era"]], "season": season, "weather": weather,
+        "moon": e["moon"], "rain": (e.get("rain") or 2) if weather == "雨" else 0,
         "image": "https://raw.githubusercontent.com/{repo}/main/data/planet.png".format(repo=os.environ.get("GITHUB_REPOSITORY", "vitawell/tiny-planet")) + f"?d={s['day']}",
         "stats": stats_of(s), "trend": trend,
         "species": [{"name": x["name"], "kind": x["kind"], "pop": x["pop"]} for x in sorted(alive, key=lambda x: -x["pop"])[:8]],
