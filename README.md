@@ -21,6 +21,16 @@
 
 依据：Shinoda et al., *Ice drives the emergence of functional protocells*, bioRxiv 2026. https://doi.org/10.64898/2026.10.13.758973
 
+## 海洋生锈与氧气溜溜球
+
+光合纪开始后，藻类吐出的氧气不会马上进大气：海水里有一池溶解铁（`海水铁%`，初始 100），氧气先把铁氧化成铁锈，沉到海底攒成一层层红灰相间的条带状铁矿。这段时间氧气停在 0，日报、星球图和 3D 页的海水会逐渐变红。铁耗尽后出现“条带状铁矿”里程碑，氧气才开始积累，海水在十几天里重新变回蓝绿。
+
+之后每次冬天浅海结冰，冰盖挡住阳光，氧气会回落一点；回落的部分在解冻后几天里涨回来，形成“氧气溜溜球”，长期不拖慢演化。
+
+参数在 `world.py` 顶部：`IRON0`（铁储量）、`IRON_PER_O2`（每 1% 氧气锈掉多少铁）。生锈阶段用独立随机数，不改变主推演的随机序列。长程测试（从第 89 天的存档换 60 个种子各推到出现小兽）：铁大约在藻类出现后 30 多天锈完，多细胞平均晚约 7 天，约三分之二的种子同一天出现，之后登陆、鱼、森林、小兽的间隔与原来基本一致。
+
+依据：Science 2026-07-31 报道 *What triggered one of the most dramatic changes in Earth's history?* https://www.science.org/content/article/what-triggered-one-most-dramatic-changes-earth-s-history （这里是对机制的简化模拟，不是定量还原）
+
 ## 蜘蛛侠模式
 
 第一人称页面右侧 🕸️（桌面按 Q）打开：点屏幕上 40 格内看得见的方块，蛛丝射过去把你拉过去，打中侧面会翻上顶面（桌面也可按 F 射向准星）。微生物只能在水里荡，粘不住水面，不会落进岩浆。玩法借鉴 [terryHu7/homecraft](https://github.com/terryHu7/homecraft) 的 web-zip。
