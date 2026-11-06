@@ -9,6 +9,8 @@ STATE = os.path.join(DATA, "state.json")
 os.makedirs(DATA, exist_ok=True)
 
 SEASONS = ["春", "夏", "秋", "冬"]
+IRON0 = 100          # 海水溶解铁初始储量（%）
+IRON_PER_O2 = 60     # 每 1% 氧气能锈掉多少铁
 
 ERAS = [
     "熔岩纪", "冷却纪", "雨海纪", "原始汤纪", "微生物纪",
@@ -215,7 +217,39 @@ def simulate(s, rng):
             s["extinct"] += 1
             ev.append(("🪦", sp["name"], "最后一个个体也没了，这个物种灭绝了。"))
     photo = sum(x["pop"] for x in s["species"] if x["kind"] in ("藻类", "苔藓", "植物") and x["pop"] > 0)
-    e["oxygen"] = clamp(round(e["oxygen"] + photo / 20000, 2), 0, 60)
+    o2 = photo / 20000
+    # ---------- 海洋生锈：氧气先被海里的溶解铁吃掉 ----------
+    # 参考 Science 2026-07-31 报道：产氧蓝藻出现后很久氧气都没涨起来，氧先和海水里的二价铁结合，
+    # 沉积成红色条带状铁矿；铁耗尽后氧气才开始积累，之后还随冰期起落（“氧气溜溜球”）。
+    # 这里用独立随机数，不打乱主推演的随机序列。
+    e.setdefault("iron", IRON0); e.setdefault("rust", 0)
+    xr = random.Random(s["seed"] + d * 53)
+    if o2 > 0 and e["iron"] > 0:
+        used = min(e["iron"], o2 * IRON_PER_O2)
+        e["iron"] = round(e["iron"] - used, 2)
+        o2 -= used / IRON_PER_O2
+        s["bif_layers"] = s.get("bif_layers", 0) + (1 if used >= 0.5 else 0)
+        e["rust"] = round(clamp(1 - e["iron"] / IRON0, 0, 1), 3)
+        if "rust" not in s["milestones"] and e["iron"] < IRON0 * 0.97:
+            milestone(s, "rust", ev, "🟥", "海洋生锈", "藻类吐出的氧气还没飘上天，就被海水里溶解的铁抓住，变成一粒粒铁锈。海水开始泛红，氧气暂时涨不起来。")
+        if e["iron"] <= 0:
+            e["iron"] = 0
+            milestone(s, "rust_done", ev, "🌅", "条带状铁矿", f"海里的溶解铁被锈光了，海底攒下 {s['bif_layers']} 层红灰相间的条带状铁矿。从今天起，藻类吐的氧气终于能留在水里、飘进天上。")
+        elif s["bif_layers"] and xr.random() < 0.3:
+            ev.append(("🟫", "红色海底", f"又沉下一层红色铁锈，和灰色泥一层隔一层，条带状铁矿攒到第 {s['bif_layers']} 层（海水里的铁还剩 {round(e['iron'])}%）。"))
+    elif e["rust"] > 0 and e["iron"] <= 0:
+        e["rust"] = round(max(0, e["rust"] - 0.06), 3)       # 铁锈慢慢沉到海底，海水重新变清
+    if e.get("ice") and e["oxygen"] > 0 and "rust_done" in s["milestones"]:
+        # 冰期：冰盖挡住阳光，光合几乎停下，氧气回落一点；这部分记下来，解冻后几天里涨回去（溜溜球，长期不拖慢演化）
+        drop = round(min(e["oxygen"], 0.4 + e["oxygen"] * 0.02), 2)
+        s["o2_debt"] = round(s.get("o2_debt", 0) + drop + o2, 2)
+        e["oxygen"] = round(e["oxygen"] - drop, 2); o2 = 0
+        if s.get("ice_days", 0) == 0:
+            ev.append(("🪀", "氧气溜溜球", f"冰盖把阳光挡在外面，藻类吐氧变慢，氧气回落到 {e['oxygen']}%。等冰化了还会再涨回来。"))
+    elif s.get("o2_debt", 0) > 0 and not e.get("ice"):
+        back = round(min(s["o2_debt"], max(0.5, s["o2_debt"] / 3)), 2)
+        s["o2_debt"] = round(s["o2_debt"] - back, 2); o2 += back
+    e["oxygen"] = clamp(round(e["oxygen"] + o2, 2), 0, 60)
 
     # 缓慢分化：现有类别里偶尔分出新物种
     alive = [x for x in s["species"] if x["pop"] > 30]
@@ -286,6 +320,7 @@ def draw_planet(s, season, path):
     seas = [(cx + crng.randint(-200, 200), cy + crng.randint(-200, 200), crng.randint(40, 110)) for _ in range(14)]
     algae = sum(x["pop"] for x in s["species"] if x["kind"] in ("藻类",) and x["pop"] > 0)
     sea_col = lerp((60, 130, 200), (70, 170, 140), min(1, algae / 3000))
+    sea_col = lerp(sea_col, (182, 68, 44), e.get("rust", 0) * 0.85)      # 海洋生锈：铁锈越多越红
     nsea = int(len(seas) * e["ocean"] / 70)
     if e.get("ice"):                                   # 结冰：先铺一圈稍大的白冰，再画海，只露出浅海边缘
         for x, y, r in seas[:nsea]:
@@ -390,7 +425,7 @@ def merge_events(days):
 def stats_of(s):
     e = s["env"]
     alive = [x for x in s["species"] if x["pop"] > 0]
-    return {"地表温度°C": e["temp"], "海洋%": e["ocean"], "大气%": e["air"], "有机物": e["organics"], "氧气%": e["oxygen"],
+    return {"地表温度°C": e["temp"], "海洋%": e["ocean"], "大气%": e["air"], "有机物": e["organics"], "氧气%": e["oxygen"], "海水铁%": round(e.get("iron", IRON0)),
             "现存物种": len(alive), "灭绝物种": s["extinct"]}
 
 
@@ -468,7 +503,7 @@ def main():
         "world": s["world"], "day": s["day"], "day_from": day_from, "day_to": day_to, "day_label": label,
         "issue": s["issue"], "sim_days": sims, "more_tomorrow": bool(s.get("backlog")),
         "date": bj_today, "era": ERAS[s["era"]], "season": season, "weather": weather,
-        "moon": e["moon"], "rain": (e.get("rain") or 2) if weather == "雨" else 0,
+        "moon": e["moon"], "rust": e.get("rust", 0), "rain": (e.get("rain") or 2) if weather == "雨" else 0,
         "image": "https://raw.githubusercontent.com/{repo}/main/data/planet.png".format(repo=os.environ.get("GITHUB_REPOSITORY", "vitawell/tiny-planet")) + f"?d={s['day']}",
         "stats": stats_of(s), "trend": trend,
         "species": [{"name": x["name"], "kind": x["kind"], "pop": x["pop"]} for x in sorted(alive, key=lambda x: -x["pop"])[:8]],
