@@ -1,98 +1,86 @@
 {
  "world": "豆星",
- "day": 102,
- "day_from": 100,
- "day_to": 102,
- "day_label": "第 100–102 天",
- "issue": 35,
- "sim_days": 3,
+ "day": 103,
+ "day_from": 103,
+ "day_to": 103,
+ "day_label": "第 103 天",
+ "issue": 36,
+ "sim_days": 1,
  "more_tomorrow": false,
- "date": "2026-11-09",
- "era": "微生物纪",
+ "date": "2026-11-10",
+ "era": "光合纪",
  "season": "秋",
- "weather": "雨",
- "moon": 6,
- "rust": 0,
- "rain": 2,
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=102",
+ "weather": "大风",
+ "moon": 7,
+ "rust": 0.001,
+ "rain": 0,
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=103",
  "stats": {
-  "地表温度°C": 14,
+  "地表温度°C": 16,
   "海洋%": 70,
   "大气%": 100,
   "有机物": 100,
   "氧气%": 0,
   "海水铁%": 100,
-  "现存物种": 6,
+  "现存物种": 7,
   "灭绝物种": 0
  },
  "trend": {},
  "species": [
   {
-   "name": "噗圆菌",
-   "kind": "微生物",
-   "pop": 7904
-  },
-  {
    "name": "蓝砂菌",
    "kind": "微生物",
-   "pop": 7773
+   "pop": 7520
+  },
+  {
+   "name": "噗圆菌",
+   "kind": "微生物",
+   "pop": 7500
   },
   {
    "name": "铃砂菌",
    "kind": "微生物",
-   "pop": 6959
+   "pop": 6942
   },
   {
    "name": "圆绒菌",
    "kind": "微生物",
-   "pop": 6791
+   "pop": 6488
   },
   {
    "name": "毛糖菌",
    "kind": "微生物",
-   "pop": 6130
+   "pop": 6131
   },
   {
    "name": "雾圆菌",
    "kind": "微生物",
-   "pop": 5210
+   "pop": 5279
+  },
+  {
+   "name": "泡芽藻",
+   "kind": "藻类",
+   "pop": 20
   }
  ],
  "events": [
   {
-   "icon": "⚡",
-   "who": "闪电",
-   "what": "劈进浅海，水里多了一些奇怪的小分子。",
-   "day": 100,
-   "tag": "第100天"
+   "icon": "🟢",
+   "who": "泡芽藻",
+   "what": "【里程碑】学会了吃阳光，开始往水里吐氧气。",
+   "day": 103
+  },
+  {
+   "icon": "🟢",
+   "who": "泡芽藻",
+   "what": "冒出一串串小氧气泡。",
+   "day": 103
   },
   {
    "icon": "🦠",
-   "who": "毛糖菌",
-   "what": "在热泉边挤成一团团，数量约 6143。（3 天里 2 次）",
-   "day": 101,
-   "tag": "第101天"
-  },
-  {
-   "icon": "🌧️",
-   "who": "雨",
-   "what": "中雨下了一整天，海洋覆盖到 70%。（3 天里 3 次）",
-   "day": 102,
-   "tag": "第102天"
-  },
-  {
-   "icon": "🦠",
-   "who": "蓝砂菌",
-   "what": "在热泉边挤成一团团，数量约 7773。（3 天里 3 次）",
-   "day": 102,
-   "tag": "第102天"
-  },
-  {
-   "icon": "🦠",
-   "who": "圆绒菌",
-   "what": "在热泉边挤成一团团，数量约 6791。",
-   "day": 102,
-   "tag": "第102天"
+   "who": "雾圆菌",
+   "what": "在热泉边挤成一团团，数量约 5279。",
+   "day": 103
   }
  ]
 }
