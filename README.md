@@ -31,6 +31,18 @@
 
 依据：Science 2026-07-31 报道 *What triggered one of the most dramatic changes in Earth's history?* https://www.science.org/content/article/what-triggered-one-most-dramatic-changes-earth-s-history （这里是对机制的简化模拟，不是定量还原）
 
+## 叠层石
+
+藻类出现后，浅海里会陆续冒出 4 块叠层石（`stroma`），每天跟着推演慢慢长高，最高 48 层，长到接近海面就停下。规则参照 Rodgers 等人的模型，简化成“每列一摞”的剖面：
+
+- 泥沙：冬天风浪大，落得最多。每粒泥沙会在吸附半径内找一个最稳的位置（两边比它高的列越多越稳），太陡的地方站不住，会滑到矮的一边；盖到菌席上时，有一半概率把菌席埋掉。
+- 菌席沉淀：夏天最旺，藻类越多越活跃。有菌席的列会往上析出一层矿物，比邻居高的列晒到的光更多、长得更快；太陡时改往旁边铺。被埋掉的菌席要从旁边慢慢爬回来，所以剖面里会出现团块。
+- 冰封期间不长。两种过程错开季节，纹层就一年一对地自己长出来。4 块叠层石的吸附半径和向光竞争强度不同，长出来有的偏穹顶，有的偏平垫，有的偏柱状。
+
+日报里出现“🪸 叠层石”事件，`today.json` 新增 `stromatolites` 字段（每块的高度、纹层数、外形和每列剖面）。星球图上，浅海里会画出条纹小丘；3D 页里，它们按剖面绕中轴转成一圈圈小方块，奶黄色是菌席沉淀，红褐色是泥沙，走近时会弹出提示。叠层石用独立随机数，也不改环境和物种，所以不影响其他演化：长程测试中 30 个种子的里程碑日期和改动前完全一致。
+
+依据：Rodgers, Fogret, van Zuilen, Cleaves, Rajamani & McMahon, *Agent-Based Modelling of Microbialite Formation Through Sedimentation and Precipitation Dynamics*, Geobiology 24(6) e70071, 2026. https://doi.org/10.1111/gbi.70071 ；开源代码 https://github.com/nrodgers1/Microbialite_simulator 。原模型是二维格点上的多代理模拟；这里为了每天推演够快、存档够小，改写成高度场，只保留了周期调制、稳定位置优先和菌席沉淀这三条核心规则。
+
 ## 蜘蛛侠模式
 
 第一人称页面右侧 🕸️（桌面按 Q）打开：点屏幕上 40 格内看得见的方块，蛛丝射过去把你拉过去，打中侧面会翻上顶面（桌面也可按 F 射向准星）。微生物只能在水里荡，粘不住水面，不会落进岩浆。玩法借鉴 [terryHu7/homecraft](https://github.com/terryHu7/homecraft) 的 web-zip。
