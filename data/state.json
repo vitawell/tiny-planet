@@ -1,26 +1,26 @@
 {
  "world": "豆星",
- "day": 118,
+ "day": 119,
  "seed": 20261007,
  "era": 5,
  "env": {
-  "temp": 9,
+  "temp": 8,
   "ocean": 70,
   "air": 100,
   "organics": 100,
   "oxygen": 0,
   "volcano": 10,
-  "moon": 6,
+  "moon": 7,
   "ice": 0,
-  "rain": 0,
-  "iron": 97.62,
-  "rust": 0.024
+  "rain": 3,
+  "iron": 97.2,
+  "rust": 0.028
  },
  "species": [
   {
    "name": "铃砂菌",
    "kind": "微生物",
-   "pop": 5811,
+   "pop": 6243,
    "born": 39,
    "parent": null,
    "traits": {
@@ -33,7 +33,7 @@
   {
    "name": "蓝砂菌",
    "kind": "微生物",
-   "pop": 6661,
+   "pop": 7116,
    "born": 54,
    "parent": "铃砂菌",
    "traits": {
@@ -46,7 +46,7 @@
   {
    "name": "圆绒菌",
    "kind": "微生物",
-   "pop": 7684,
+   "pop": 7414,
    "born": 61,
    "parent": "铃砂菌",
    "traits": {
@@ -59,7 +59,7 @@
   {
    "name": "噗圆菌",
    "kind": "微生物",
-   "pop": 7717,
+   "pop": 7620,
    "born": 64,
    "parent": "铃砂菌",
    "traits": {
@@ -72,7 +72,7 @@
   {
    "name": "毛糖菌",
    "kind": "微生物",
-   "pop": 6770,
+   "pop": 6583,
    "born": 67,
    "parent": "噗圆菌",
    "traits": {
@@ -85,7 +85,7 @@
   {
    "name": "雾圆菌",
    "kind": "微生物",
-   "pop": 5687,
+   "pop": 5364,
    "born": 91,
    "parent": "毛糖菌",
    "traits": {
@@ -98,7 +98,7 @@
   {
    "name": "泡芽藻",
    "kind": "藻类",
-   "pop": 120,
+   "pop": 141,
    "born": 103,
    "parent": "微生物",
    "traits": {
@@ -111,7 +111,7 @@
   {
    "name": "苔噗菌",
    "kind": "微生物",
-   "pop": 6073,
+   "pop": 6560,
    "born": 104,
    "parent": "铃砂菌",
    "traits": {
@@ -131,26 +131,6 @@
   "photo"
  ],
  "log": [
-  {
-   "day": 10,
-   "events": [
-    {
-     "icon": "🪨",
-     "who": "地壳",
-     "what": "一块块黑色岩壳浮上来又沉下去，表面降到 341°C。"
-    },
-    {
-     "icon": "🌋",
-     "who": "咕噜火山群",
-     "what": "同时冒烟，往天上吐出更多气体（大气浓度 31%）。"
-    },
-    {
-     "icon": "🌙",
-     "who": "小月亮",
-     "what": "上弦月，静静看着下面。"
-    }
-   ]
-  },
   {
    "day": 11,
    "events": [
@@ -1295,15 +1275,46 @@
      "tag": "第117天"
     }
    ]
+  },
+  {
+   "day": 119,
+   "label": "第 119 天",
+   "events": [
+    {
+     "icon": "🌧️",
+     "who": "雨",
+     "what": "暴雨下了一整天，海洋覆盖到 70%。",
+     "day": 119
+    },
+    {
+     "icon": "⚡",
+     "who": "闪电",
+     "what": "劈进浅海，水里多了一些奇怪的小分子。",
+     "day": 119
+    },
+    {
+     "icon": "🟢",
+     "who": "泡芽藻",
+     "what": "把浅海染成淡绿色，数量约 141。",
+     "day": 119
+    },
+    {
+     "icon": "🦠",
+     "who": "圆绒菌",
+     "what": "又分裂了好几轮，现在约 7414 个。",
+     "day": 119
+    }
+   ]
   }
  ],
- "last_date": "2026-11-13",
- "issue": 39,
+ "last_date": "2026-11-14",
+ "issue": 40,
  "backlog": [],
  "backlog_part": 0,
  "proto_cells": 1,
  "bif_layers": 0,
  "ice_days": 7,
  "ft_winter": 3,
- "ft_cycles": 1
+ "ft_cycles": 1,
+ "stroma": []
 }
