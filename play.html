@@ -315,6 +315,27 @@ const ventMat = new THREE.MeshLambertMaterial({ color: 0x3a2f2a }), ventTop = ne
 for (const [x, z] of vents) { const hgt = 1.4 + hash(x, z);
   const ch = new THREE.Mesh(new THREE.BoxGeometry(0.7, hgt, 0.7), ventMat); ch.position.set(x + 0.5, H[x][z] + hgt / 2, z + 0.5); scene.add(ch);
   const tp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.4), ventTop); tp.position.set(x + 0.5, H[x][z] + hgt + 0.05, z + 0.5); scene.add(tp); }
+// ---------- 叠层石：按 today.json 里每块的“每列一摞”剖面，绕中轴转成一圈圈小方块；奶黄=菌席沉淀，红褐=泥沙 ----------
+const stromas = [];
+if (seaLevel && (d.stromatolites || []).length) {
+  const cand = [];
+  for (let x = 3; x < N - 3; x++) for (let z = 3; z < N - 3; z++) { const h = H[x][z];
+    if (h <= seaLevel - 2 && h >= seaLevel - 5 && vents.every(([a, b]) => Math.hypot(a - x, b - z) > 4) && Math.hypot(x - VX, z - VZ) > 8) cand.push([hash(x * 3, z * 5), x, z]); }
+  cand.sort((a, b) => a[0] - b[0]);
+  for (const [, x, z] of cand) { if (stromas.length >= d.stromatolites.length) break; if (stromas.every(o => Math.hypot(o.x - x, o.z - z) > 5)) stromas.push({ x, z }); }
+  const U = 0.14, C = { p: new THREE.Color(0xeedc9a), s: new THREE.Color(0xa0573a), b: new THREE.Color(0x4f4440) };
+  const cells = [];
+  stromas.forEach((o, i) => { const st = d.stromatolites[i]; o.info = st; const cols = st.cols || [], W = cols.length, c = (W - 1) >> 1;
+    const room = seaLevel + 0.7 - H[o.x][o.z], maxH = Math.max(...cols.map(s => s.length), 1), u = Math.min(0.06, room / maxH);
+    for (let k = 0; k <= c; k++) { const n = k ? Math.max(6, Math.round(2 * Math.PI * k * 0.8)) : 1;
+      for (let a = 0; a < n; a++) { const ang = a / n * 2 * Math.PI, col = cols[Math.cos(ang) >= 0 ? c + k : c - k] || "", outer = cols[Math.cos(ang) >= 0 ? c + k + 1 : c - k - 1] || "";
+        for (let y = 0; y < col.length; y++) { if (k < c && y < outer.length && y < col.length - 1) continue;   // 被外圈挡住的内部不画
+          cells.push([o.x + 0.5 + Math.cos(ang) * k * U, H[o.x][o.z] + (y + 0.5) * u, o.z + 0.5 + Math.sin(ang) * k * U, u, C[col[y]] || C.s]); } } } });
+  if (cells.length) { const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial(), cells.length), m4 = new THREE.Matrix4();
+    cells.forEach(([x, y, z, u, col], i) => { m4.makeScale(U * 1.15, u, U * 1.15).setPosition(x, y, z); im.setMatrixAt(i, m4); im.setColorAt(i, col); });
+    im.frustumCulled = false; scene.add(im); }
+}
+let stromaSaid = -1;
 const bubbles = vents.length ? particles(vents.length * 40, 0xdff4ff, 0.12) : null, bubState = [];
 if (bubbles) for (let i = 0; i < vents.length * 40; i++) bubState.push({ v: i % vents.length, t: Math.random() * 4 });
 const microbe = species.find(s => s.kind === "微生物");
@@ -678,7 +699,10 @@ function step(dt) {
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toast.style.display = "none"; }
 }
 let tPre = 0;
-function loop() { const dt = Math.min(0.05, clock.getDelta()); tPre += dt; if (started) { step(dt); introCam(dt); drawMap(); } else { overview(tPre); scene.fog.far = 160; }
+function stromaNear() { const i = stromas.findIndex(o => Math.hypot(px - o.x - 0.5, pz - o.z - 0.5) < 2.2);
+  if (i >= 0 && i !== stromaSaid && stromas[i].info) { const s = stromas[i].info; say(`🪸 叠层石${"①②③④"[s.id] || ""}：${s.layers} 道纹层，像${s.shape}。奶黄是菌席沉淀，红褐是泥沙`); }
+  stromaSaid = i; }
+function loop() { const dt = Math.min(0.05, clock.getDelta()); tPre += dt; if (started) { step(dt); introCam(dt); drawMap(); stromaNear(); } else { overview(tPre); scene.fog.far = 160; }
   renderer.render(scene, camera); requestAnimationFrame(loop); }
 loop();
 </script>
