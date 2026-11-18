@@ -296,20 +296,29 @@ def simulate(s, rng):
 # 依据：Rodgers et al., Geobiology 2026, e70071, doi:10.1111/gbi.70071；代码 github.com/nrodgers1/Microbialite_simulator
 # 两类“代理”：沉积颗粒落下后按周围固体多少择位粘住（类 DLA），菌席代理在表面诱导矿物沉淀、向上长；
 # 两者都受外部周期调制（这里用豆星的一年 = 28 天，菌席夏天最旺、沉积冬天最多），纹层由此自己长出来。
-ST_W, ST_MAX, ST_SITES = 13, 48, 4
-ST_PARAMS = [  # (吸附半径, 每天最多沉积颗粒, 向光竞争, 最陡台阶)：半径小/竞争弱→穹顶、平层；竞争强、台阶陡→柱状
-    (1, 3, 0.10, 2), (3, 2, 0.25, 5), (2, 4, 0.05, 2), (4, 2, 0.30, 4)]
+ST_W, ST_MAX, ST_SITES = 13, 64, 4
+ST_PARAMS = [  # (吸附半径, 每天最多沉积颗粒)：每块叠层石落泥沙的方式略有不同
+    (1, 3), (3, 2), (2, 4), (4, 2)]
+ST_KIND_OF = ["丝状", "球状", "丝状", "球状"]   # 按出生顺序轮流：两种菌席各两块
+# 两种菌席（参照现代叠层石：丝状蓝细菌向光滑行、聚成束→锥形 Conophyton；球状蓝细菌长成疱状菌席→凝块石）
+#   trap 粘泥沙的多少  slide 泥沙站得住的最陡台阶  rate 沉淀快慢  comp 向光竞争  step 菌席沉淀的最陡台阶
+#   bind 菌丝网整片粘住一层细泥的概率  sync 整片一起沉淀的程度（丝状菌丝连成一张网，球状菌落各长各的）  bury 被泥埋掉的概率  glide 菌丝向光聚到最高处的强度  seas 沉淀跟季节走的程度  clump 一次析出两层的概率  spot 随处冒出新菌落的概率
+ST_KINDS = {
+    "丝状": dict(trap=0.24, slide=2, rate=0.24, comp=0.3, step=4, bury=0.1, glide=0.3, seas=1.0, clump=0.0, spot=0.0, sync=0.85, bind=0.12),
+    "球状": dict(trap=0.6, slide=3, rate=0.15, comp=0.05, step=3, bury=0.7, glide=0.0, seas=0.4, clump=0.5, spot=0.12, sync=0.0, bind=0.0),
+}
 
 
 def _st_new(i):
     c = ST_W // 2
     cols = ["b" if abs(x - c) <= 2 - (abs(x - c) == 2) else "" for x in range(ST_W)]   # 局部起点：中间一小块基岩
-    return {"id": i, "cols": cols, "mat": [1 if cl else 0 for cl in cols], "born": None}
+    return {"id": i, "kind": ST_KIND_OF[i % len(ST_KIND_OF)], "cols": cols, "mat": [1 if cl else 0 for cl in cols], "born": None}
 
 
 def stroma_step(s, d, season, algae, iced, ev):
     # 简化成“每列一摞”的高度场：沉积颗粒落进吸附半径里最稳的位置（周围比它高的列越多越稳），
-    # 有菌席的列在夏天往上沉淀一层矿物，比邻居高的列晒到更多光、长得更快（柱状）；菌席被泥埋住后要慢慢重新长过来（形成团块）。
+    # 有菌席的列在夏天往上沉淀一层矿物，比邻居高的列晒到更多光、长得更快；菌席被泥埋住后要慢慢重新长过来。
+    # 丝状菌席会钻出泥沙、往高处滑行，沉淀集中在顶上；球状菌席容易被埋，又到处冒出一小团一小团，沉淀不太跟季节走。
     xr = random.Random(s["seed"] + d * 97)
     st = s.setdefault("stroma", [])
     if algae <= 0:
@@ -318,6 +327,8 @@ def stroma_step(s, d, season, algae, iced, ev):
         site = _st_new(len(st)); site["born"] = d; st.append(site)
         if len(st) == 1:
             ev.append(("🪸", "叠层石", "浅滩上，藻类和细菌织成的黏糊糊菌席开始把落下的泥沙粘住，又在自己身上析出一层薄薄的矿物。这是豆星第一块叠层石的起点。"))
+        if len({x.get("kind") for x in st}) == 2 and len(st) == 2:
+            ev.append(("🦠", "两种菌席", "浅滩上的菌席分成了两派：一种是细丝缠成的，会往有光的高处爬；另一种是一粒粒小球挤成的疱疱，到处冒头。它们堆出来的石头长得不一样。"))
     if iced:
         return                                           # 冰封期间不长
     t = d % 28
@@ -325,11 +336,13 @@ def stroma_step(s, d, season, algae, iced, ev):
     f_s = max(math.cos(2 * math.pi * (t - 24) / 28), 0)   # 泥沙：冬天风浪大，沉积最多
     act = min(1.0, 0.25 + algae / 3000)
     for site in st:
-        r_att, a_s, comp, step = ST_PARAMS[site["id"] % len(ST_PARAMS)]
+        r_att, a_s = ST_PARAMS[site["id"] % len(ST_PARAMS)]
+        k = ST_KINDS[site.setdefault("kind", ST_KIND_OF[site["id"] % len(ST_KIND_OF)])]
+        comp, step = k["comp"], k["step"]
         cols, mat = [list(c) for c in site["cols"]], site["mat"]
         hs = lambda: [len(c) for c in cols]
         h0 = max(hs())
-        for _ in range(int(a_s * f_s + xr.random())):
+        for _ in range(int(a_s * k["trap"] * f_s + xr.random())):
             h = hs(); x0 = xr.randrange(ST_W)
             cand, wts = [], []
             for x in range(max(0, x0 - r_att), min(ST_W, x0 + r_att + 1)):
@@ -339,41 +352,65 @@ def stroma_step(s, d, season, algae, iced, ev):
             if cand:
                 x = xr.choices(cand, weights=wts)[0]
                 for _ in range(3):                            # 太陡站不住，滑到矮的一边
-                    low = [j for j in (x - 1, x + 1) if 0 <= j < ST_W and h[x] - h[j] >= step]
+                    low = [j for j in (x - 1, x + 1) if 0 <= j < ST_W and h[x] - h[j] >= k["slide"]]
                     if not low: break
                     x = min(low, key=lambda j: h[j])
                 cols[x].append("s")
-                if mat[x] and xr.random() < 0.5: mat[x] = 0           # 菌席被泥盖住
+                if mat[x] and xr.random() < k["bury"]: mat[x] = 0      # 菌席被泥盖住（丝状的能钻出来）
+        if k["bind"] and xr.random() < k["bind"] * f_s:       # 丝状菌丝网像捕虫网，冬天整片粘住一层细泥，再从泥里钻出来
+            for x in range(ST_W):
+                if mat[x] and len(cols[x]) < ST_MAX: cols[x].append("s")
         h = hs()
+        fp = k["seas"] * f_p + (1 - k["seas"]) * 0.5
+        u = xr.random()
         for x in range(ST_W):
             if not mat[x]:
                 nb_mat = any(mat[j] for j in (x - 1, x + 1) if 0 <= j < ST_W)
-                if h[x] and xr.random() < (0.25 if nb_mat else 0.05): mat[x] = 1   # 菌席从旁边慢慢爬回来
+                if h[x] and xr.random() < (0.25 if nb_mat else 0.05) + k["spot"]: mat[x] = 1   # 菌席从旁边慢慢爬回来（球状的到处冒头）
                 continue
             if h[x] >= ST_MAX or xr.random() < 0.01: continue
             nb = [h[j] for j in (x - 1, x + 1) if 0 <= j < ST_W and h[j]] or [h[x]]
-            light = clamp(1 + comp * (h[x] - sum(nb) / len(nb)), 0.2, 2.5)
-            if xr.random() < 0.25 * act * f_p * light:
+            light = clamp(1 + comp * (h[x] - sum(nb) / len(nb)) + k["glide"] * (h[x] - sum(h) / ST_W), 0.2, 2.5)   # 丝状菌丝聚成束，最高处最旺
+            if k["sync"] * u + (1 - k["sync"]) * xr.random() < k["rate"] * act * fp * light:
                 tx = x
                 low = [j for j in (x - 1, x + 1) if 0 <= j < ST_W and h[x] - h[j] >= step]
-                if low: tx = xr.choice(low)                   # 太陡就往旁边铺：菌席侧向扩张
-                cols[tx].append("p"); h[tx] += 1
+                if low: tx = min(low, key=lambda j: h[j])     # 太陡就往旁边铺：菌席顺着坡往下披
+                for _ in range(2 if xr.random() < k["clump"] else 1):
+                    if h[tx] < ST_MAX: cols[tx].append("p"); h[tx] += 1
         site["cols"] = ["".join(c) for c in cols]
         info = stroma_info(site)
         if info["h"] // 8 > h0 // 8:
-            ev.append(("🪸", f"叠层石{'①②③④'[site['id']]}", f"又长高了一截，中间能数出 {info['layers']} 道纹层，外形像{info['shape']}。"))
+            what = f"{info['layers']} 道纹层" if info["fabric"] == "纹层" else "纹层模糊、一团一团的"
+            ev.append(("🪸", f"叠层石{'①②③④'[site['id']]}", f"{site['kind']}菌席堆的这块又长高了一截，中间{'能数出 ' if info['fabric'] == '纹层' else '看着'}{what}，外形像{info['shape']}。"))
 
 
 def stroma_info(site):
-    hs = [len(c) for c in site["cols"]]
+    cols = site["cols"]
+    hs = [len(c) for c in cols]
     h = max(hs)
     c = ST_W // 2
-    col = [ch for ch in site["cols"][c] if ch in "sp"]
+    col = [ch for ch in cols[c] if ch in "sp"]
     layers = sum(1 for i in range(1, len(col)) if col[i] != col[i - 1]) + (1 if col else 0)
+    # 纹层连不连续：相邻两列从各自顶面往下数同样深度处比成分（纹层顺着穹顶、锥面披下来，只看最近长的 24 层）。
+    # 连得上是纹层（叠层石），对不上是凝块（凝块石）
+    same = tot = np_ = 0
+    for x in range(ST_W - 1):
+        for j in range(min(24, hs[x], hs[x + 1])):
+            a, b = cols[x][hs[x] - 1 - j], cols[x + 1][hs[x + 1] - 1 - j]
+            if a in "sp" and b in "sp": tot += 1; same += a == b; np_ += (a == "p") + (b == "p")
+    # 扣掉“碰巧一样”的部分（成分越单一越容易碰巧一样），剩下的才是纹层的连续程度
+    q = np_ / (2 * tot) if tot else 0.5
+    chance = q * q + (1 - q) * (1 - q)
+    kappa = (same / tot - chance) / (1 - chance) if tot and chance < 1 else 0
+    fabric = "纹层" if tot < 20 or kappa >= 0.15 else "凝块"
     body = [x for x in range(ST_W) if hs[x] >= 0.3 * h]
     peaks = sum(1 for x in range(1, ST_W - 1) if hs[x] >= 0.5 * h and hs[x] > hs[x - 1] + 2 and hs[x] >= hs[x + 1] + 2)
-    shape = "一层薄垫" if h <= 4 else "几根小柱子" if peaks >= 2 else "平平的垫子" if h - min(hs[x] for x in body) <= 3 and len(body) > 8 else "小穹顶"
-    return {"h": h, "layers": layers, "shape": shape}
+    top = sum(1 for x in range(ST_W) if hs[x] >= h - 2)
+    xm = hs.index(h)
+    side = [hs[j] for j in (xm - 3, xm + 3) if 0 <= j < ST_W]
+    shape = ("一层薄垫" if h <= 4 else "几根小柱子" if peaks >= 2 else "尖尖的锥子" if h >= 10 and top <= 3 and h - max(side) >= min(8, 0.6 * h)
+             else "平平的垫子" if h - min(hs[x] for x in body) <= 3 and len(body) > 8 else "疙疙瘩瘩的小丘" if fabric == "凝块" else "小穹顶")
+    return {"h": h, "layers": layers, "shape": shape, "fabric": fabric, "match": round(kappa, 2)}
 
 # ---------- 扁平星球图 ----------
 def lerp(c1, c2, t):
@@ -606,7 +643,7 @@ def main():
         "issue": s["issue"], "sim_days": sims, "more_tomorrow": bool(s.get("backlog")),
         "date": bj_today, "era": ERAS[s["era"]], "season": season, "weather": weather,
         "moon": e["moon"], "rust": e.get("rust", 0),
-        "stromatolites": [dict(stroma_info(x), id=x["id"], cols=x["cols"]) for x in s.get("stroma", [])], "rain": (e.get("rain") or 2) if weather == "雨" else 0,
+        "stromatolites": [dict(stroma_info(x), id=x["id"], kind=x.get("kind", ST_KIND_OF[x["id"] % 4]), cols=x["cols"]) for x in s.get("stroma", [])], "rain": (e.get("rain") or 2) if weather == "雨" else 0,
         "image": "https://raw.githubusercontent.com/{repo}/main/data/planet.png".format(repo=os.environ.get("GITHUB_REPOSITORY", "vitawell/tiny-planet")) + f"?d={s['day']}",
         "stats": stats_of(s), "trend": trend,
         "species": [{"name": x["name"], "kind": x["kind"], "pop": x["pop"]} for x in sorted(alive, key=lambda x: -x["pop"])[:8]],
