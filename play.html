@@ -700,7 +700,7 @@ function step(dt) {
 }
 let tPre = 0;
 function stromaNear() { const i = stromas.findIndex(o => Math.hypot(px - o.x - 0.5, pz - o.z - 0.5) < 2.2);
-  if (i >= 0 && i !== stromaSaid && stromas[i].info) { const s = stromas[i].info; say(`🪸 叠层石${"①②③④"[s.id] || ""}：${s.layers} 道纹层，像${s.shape}。奶黄是菌席沉淀，红褐是泥沙`); }
+  if (i >= 0 && i !== stromaSaid && stromas[i].info) { const s = stromas[i].info; say(`🪸 叠层石${"①②③④"[s.id] || ""}${s.kind ? "（" + s.kind + "菌席）" : ""}：${s.fabric === "凝块" ? "纹层模糊，一团一团的凝块" : s.layers + " 道纹层"}，像${s.shape}。奶黄是菌席沉淀，红褐是泥沙`); }
   stromaSaid = i; }
 function loop() { const dt = Math.min(0.05, clock.getDelta()); tPre += dt; if (started) { step(dt); introCam(dt); drawMap(); stromaNear(); } else { overview(tPre); scene.fog.far = 160; }
   renderer.render(scene, camera); requestAnimationFrame(loop); }
