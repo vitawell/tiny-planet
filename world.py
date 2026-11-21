@@ -252,7 +252,7 @@ def simulate(s, rng):
     e["oxygen"] = clamp(round(e["oxygen"] + o2, 2), 0, 60)
 
     algae_pop = sum(x["pop"] for x in s["species"] if x["kind"] == "藻类" and x["pop"] > 0)
-    stroma_step(s, d, season, algae_pop, bool(e.get("ice")), ev)
+    stroma_step(s, d, season, algae_pop, bool(e.get("ice")), ev, e.get("rust", 0))
 
     # 缓慢分化：现有类别里偶尔分出新物种
     alive = [x for x in s["species"] if x["pop"] > 30]
@@ -315,7 +315,7 @@ def _st_new(i):
     return {"id": i, "kind": ST_KIND_OF[i % len(ST_KIND_OF)], "cols": cols, "mat": [1 if cl else 0 for cl in cols], "born": None}
 
 
-def stroma_step(s, d, season, algae, iced, ev):
+def stroma_step(s, d, season, algae, iced, ev, rust=0):
     # 简化成“每列一摞”的高度场：沉积颗粒落进吸附半径里最稳的位置（周围比它高的列越多越稳），
     # 有菌席的列在夏天往上沉淀一层矿物，比邻居高的列晒到更多光、长得更快；菌席被泥埋住后要慢慢重新长过来。
     # 丝状菌席会钻出泥沙、往高处滑行，沉淀集中在顶上；球状菌席容易被埋，又到处冒出一小团一小团，沉淀不太跟季节走。
@@ -331,6 +331,7 @@ def stroma_step(s, d, season, algae, iced, ev):
             ev.append(("🦠", "两种菌席", "浅滩上的菌席分成了两派：一种是细丝缠成的，会往有光的高处爬；另一种是一粒粒小球挤成的疱疱，到处冒头。它们堆出来的石头长得不一样。"))
     if iced:
         return                                           # 冰封期间不长
+    rainy = any(x[0] == "🌧️" for x in ev)
     t = d % 28
     f_p = max(math.cos(2 * math.pi * (t - 10) / 28), 0)   # 菌席沉淀：夏天最旺
     f_s = max(math.cos(2 * math.pi * (t - 24) / 28), 0)   # 泥沙：冬天风浪大，沉积最多
@@ -377,11 +378,54 @@ def stroma_step(s, d, season, algae, iced, ev):
                 if low: tx = min(low, key=lambda j: h[j])     # 太陡就往旁边铺：菌席顺着坡往下披
                 for _ in range(2 if xr.random() < k["clump"] else 1):
                     if h[tx] < ST_MAX: cols[tx].append("p"); h[tx] += 1
+        if rust_colloid(s, d, site, cols, mat, rust, rainy) and not s.get("rust_strom"):
+            s["rust_strom"] = d
+            ev.append(("🟥", "铁锈纹层", f"海水里悬着的铁锈絮成一团团，落到叠层石{'①②③④'[site['id']]}上粘住了，夹进一道红色的纹层。从今往后，这些石头的剖面里会多出红色的一层层。"))
         site["cols"] = ["".join(c) for c in cols]
         info = stroma_info(site)
         if info["h"] // 8 > h0 // 8:
             what = f"{info['layers']} 道纹层" if info["fabric"] == "纹层" else "纹层模糊、一团一团的"
             ev.append(("🪸", f"叠层石{'①②③④'[site['id']]}", f"{site['kind']}菌席堆的这块又长高了一截，中间{'能数出 ' if info['fabric'] == '纹层' else '看着'}{what}，外形像{info['shape']}。"))
+
+
+# ---------- 铁锈胶体纹层 ----------
+# 依据：Zhou, Qiu & Ballhaus, Self-organized colloidal growth of stromatolites, Research Square 预印本 2026,
+# doi:10.21203/rs.3.rs-10972339/v1。华北中元古代铁质叠层石由一层层三价铁（氢）氧化物胶体堆成：
+# 河水带来的胶体一碰到海水就絮凝，落到海底后按“扩散限制聚集 + 表面扩散”（DLA–SD）粘上去，不靠微生物也能长出纹层。
+# 豆星这里：海水里悬浮的铁锈（env.rust）越多、下雨天河水冲来的越多，铁锈絮团就越多；
+# 絮团从上方随机游走落下，先碰到哪儿就粘哪儿（凸出的顶最容易接住，DLA），粘上后还能沿表面挪几步、
+# 落进旁边的低洼（表面扩散，把纹层抹平）。菌席粘性大，丝状菌丝网接得更多。用独立随机数，不改其余推演。
+RUST_FLOC = 3.0      # 海水全红时每天大约落下的絮团数
+RUST_SD = 2          # 粘上后沿表面最多挪几步
+
+
+def rust_colloid(s, d, site, cols, mat, rust, rainy):
+    if rust <= 0.02:
+        return
+    rr = random.Random(s["seed"] * 7 + d * 131 + site["id"])
+    n = int(RUST_FLOC * rust * (1.8 if rainy else 1) + rr.random())
+    stick = 1.3 if site.get("kind") == "丝状" else 1.0
+    got = 0
+    for _ in range(n):
+        h = [len(c) for c in cols]
+        x = rr.randrange(ST_W)
+        for _ in range(ST_W):                                  # 随机游走下落：被邻居高处先接住（DLA 屏蔽效应）
+            nb = [j for j in (x - 1, x + 1) if 0 <= j < ST_W]
+            if not h[x] and not any(h[j] for j in nb):
+                x = rr.choice(nb); continue
+            hi = [j for j in nb if h[j] > h[x] + 1]
+            if hi and rr.random() < 0.6: x = rr.choice(hi)     # 侧面先碰到更高的那列
+            break
+        if not h[x] or h[x] >= ST_MAX: continue
+        if rr.random() > 0.55 * stick * (1.4 if mat[x] else 1.0): continue   # 没粘住，被水冲走
+        for _ in range(RUST_SD):                               # 表面扩散：往低处挪
+            low = [j for j in (x - 1, x + 1) if 0 <= j < ST_W and 0 < h[j] < h[x]]
+            if not low or rr.random() < 0.5: break
+            x = rr.choice(low)
+        cols[x].append("r"); got += 1
+    if got:
+        site["rust_n"] = site.get("rust_n", 0) + got
+    return got
 
 
 def stroma_info(site):
@@ -391,6 +435,8 @@ def stroma_info(site):
     c = ST_W // 2
     col = [ch for ch in cols[c] if ch in "sp"]
     layers = sum(1 for i in range(1, len(col)) if col[i] != col[i - 1]) + (1 if col else 0)
+    mid = cols[c]
+    red = sum(1 for i, ch in enumerate(mid) if ch == "r" and (i == 0 or mid[i - 1] != "r"))   # 中轴剖面里的红色铁锈纹层道数
     # 纹层连不连续：相邻两列从各自顶面往下数同样深度处比成分（纹层顺着穹顶、锥面披下来，只看最近长的 24 层）。
     # 连得上是纹层（叠层石），对不上是凝块（凝块石）
     same = tot = np_ = 0
@@ -410,7 +456,7 @@ def stroma_info(site):
     side = [hs[j] for j in (xm - 3, xm + 3) if 0 <= j < ST_W]
     shape = ("一层薄垫" if h <= 4 else "几根小柱子" if peaks >= 2 else "尖尖的锥子" if h >= 10 and top <= 3 and h - max(side) >= min(8, 0.6 * h)
              else "平平的垫子" if h - min(hs[x] for x in body) <= 3 and len(body) > 8 else "疙疙瘩瘩的小丘" if fabric == "凝块" else "小穹顶")
-    return {"h": h, "layers": layers, "shape": shape, "fabric": fabric, "match": round(kappa, 2)}
+    return {"h": h, "layers": layers, "red": red, "shape": shape, "fabric": fabric, "match": round(kappa, 2)}
 
 # ---------- 扁平星球图 ----------
 def lerp(c1, c2, t):
@@ -454,7 +500,7 @@ def draw_planet(s, season, path):
     micro = sum(x["pop"] for x in s["species"] if x["kind"] == "微生物" and x["pop"] > 0)
     for x, y, r in seas[: min(nsea, 1 + micro // 500)]:
         ld.ellipse([x - 6, y - 6, x + 6, y + 6], fill=(170, 255, 220))
-    # 叠层石：浅海里的小丘，按中轴那一摞的纹层画成奶黄/红褐相间的条纹
+    # 叠层石：浅海里的小丘，按中轴那一摞的纹层画成奶黄/灰褐/铁锈红相间的条纹
     for i, site in enumerate(s.get("stroma", [])[:nsea]):
         x0, y0, r0 = seas[i]
         bx, by = x0 + int(r0 * 0.45), y0 + int(r0 * 0.3)
@@ -467,7 +513,7 @@ def draw_planet(s, season, path):
             top = by - hpx * (j + 1) / bands
             frac = 1 - (j / bands) ** 2
             ww = max(2, wpx * frac ** 0.5)
-            fill = {"p": (238, 220, 154), "s": (160, 87, 58)}.get(ch, (79, 68, 64))
+            fill = {"p": (238, 220, 154), "s": (138, 117, 96), "r": (196, 48, 30)}.get(ch, (79, 68, 64))
             ld.rectangle([bx - ww, top, bx + ww, top + hpx / bands + 1], fill=fill)
     # 陆地绿化
     land = sum(x["pop"] for x in s["species"] if x["kind"] in ("苔藓", "真菌", "植物") and x["pop"] > 0)
