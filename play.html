@@ -11,7 +11,7 @@ canvas{display:block}
 #hud b{font-size:15px}
 #card{position:fixed;left:50%;top:18%;transform:translateX(-50%);width:min(86vw,420px);background:rgba(20,28,52,.92);border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.55;display:none;pointer-events:none}
 #card .tag{font-size:12px;color:#8fb4ff}
-#toast{position:fixed;left:50%;bottom:170px;transform:translateX(-50%);background:rgba(0,0,0,.55);padding:6px 12px;border-radius:999px;font-size:13px;display:none;white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:170px;transform:translateX(-50%);background:rgba(0,0,0,.55);padding:6px 12px;border-radius:14px;font-size:13px;line-height:1.45;display:none;white-space:normal;width:max-content;max-width:min(420px,calc(100vw - 32px));box-sizing:border-box;text-align:center;overflow-wrap:anywhere}
 #joy{position:fixed;left:24px;bottom:28px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.25)}
 #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
 .btn{position:fixed;right:24px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:14px}
@@ -432,7 +432,7 @@ for (const id of ["up", "down"]) { const b = document.getElementById(id); b.onmo
 
 const hud = document.getElementById("hud"), card = document.getElementById("card"), toast = document.getElementById("toast");
 const flash = document.getElementById("flash"), heat = document.getElementById("heat");
-let toastT = 0; function say(t) { toast.textContent = t; toast.style.display = "block"; toastT = 2.2; }
+let toastT = 0; function say(t) { toast.textContent = t; toast.style.display = "block"; toastT = Math.min(6, 2.2 + t.length / 25); }   // 长提示多停一会儿
 function updHud() { const n = markers.filter(m => m.found).length;
   hud.innerHTML = `<b>${d.world || "豆星"} · ${label}</b><br>${d.era || ""} · ${d.weather || ""} · ${temp}°C<br>你是：${role.name}（${role.kind}）<br>已发现事件 ${n}/${markers.length}` +
     (n === markers.length && n ? "<br>✨ 今天的豆星逛完了" : ""); }
