@@ -1,26 +1,26 @@
 {
  "world": "豆星",
- "day": 173,
- "day_from": 169,
- "day_to": 173,
- "day_label": "第 169–173 天",
- "issue": 53,
+ "day": 178,
+ "day_from": 174,
+ "day_to": 178,
+ "day_label": "第 174–178 天",
+ "issue": 54,
  "sim_days": 5,
  "more_tomorrow": false,
- "date": "2026-11-27",
+ "date": "2026-11-28",
  "era": "光合纪",
- "season": "春",
- "weather": "大风",
- "moon": 5,
+ "season": "夏",
+ "weather": "晴",
+ "moon": 2,
  "rust": 0,
  "stromatolites": [
   {
-   "h": 11,
-   "layers": 2,
+   "h": 12,
+   "layers": 3,
    "red": 3,
    "shape": "尖尖的锥子",
    "fabric": "纹层",
-   "match": 0,
+   "match": -0.06,
    "id": 0,
    "kind": "丝状",
    "cols": [
@@ -28,12 +28,12 @@
     "",
     "",
     "s",
-    "s",
-    "brrrr",
-    "brrrprsr",
-    "brrrprrrrrr",
-    "prrrr",
-    "s",
+    "spp",
+    "brrrrp",
+    "brrrprsrpp",
+    "brrrprrrrrrp",
+    "prrrrppp",
+    "spppp",
     "",
     "",
     ""
@@ -45,7 +45,7 @@
    "red": 1,
    "shape": "小穹顶",
    "fabric": "纹层",
-   "match": -0.4,
+   "match": 0.33,
    "id": 1,
    "kind": "球状",
    "cols": [
@@ -59,43 +59,43 @@
     "brrspp",
     "sprrrppr",
     "prrrr",
-    "ss",
+    "sspp",
     "spp",
     ""
    ]
   },
   {
-   "h": 10,
-   "layers": 1,
+   "h": 12,
+   "layers": 2,
    "red": 2,
-   "shape": "小穹顶",
-   "fabric": "纹层",
-   "match": 0.36,
+   "shape": "疙疙瘩瘩的小丘",
+   "fabric": "凝块",
+   "match": -0.03,
    "id": 2,
    "kind": "丝状",
    "cols": [
     "",
     "",
-    "ss",
-    "ssss",
-    "prrs",
+    "ssp",
+    "sssspp",
+    "prrsppp",
     "brrppprrsr",
-    "brrrrsrss",
-    "brrprrs",
-    "pprrs",
-    "",
+    "brrrrsrssppp",
+    "brrprrspp",
+    "pprrsp",
+    "pp",
     "",
     "",
     ""
    ]
   },
   {
-   "h": 3,
-   "layers": 0,
+   "h": 4,
+   "layers": 1,
    "red": 0,
    "shape": "一层薄垫",
    "fabric": "纹层",
-   "match": 0,
+   "match": 0.0,
    "id": 3,
    "kind": "球状",
    "cols": [
@@ -105,8 +105,8 @@
     "",
     "ss",
     "brs",
-    "b",
-    "bs",
+    "bp",
+    "bspp",
     "s",
     "",
     "",
@@ -116,106 +116,105 @@
   }
  ],
  "rain": 0,
- "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=173",
+ "image": "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/planet.png?d=178",
  "stats": {
-  "地表温度°C": 7,
+  "地表温度°C": 12,
   "海洋%": 70,
   "大气%": 100,
   "有机物": 100,
-  "氧气%": 6.09,
+  "氧气%": 7.38,
   "海水铁%": 0,
   "现存物种": 13,
   "灭绝物种": 0
  },
  "trend": {
-  "地表温度°C": "11→7",
-  "氧气%": "3.4→6.09",
-  "现存物种": "12→13"
+  "地表温度°C": "7→12",
+  "氧气%": "6.09→7.38"
  },
  "species": [
   {
-   "name": "圆绒菌",
+   "name": "铃砂菌",
    "kind": "微生物",
-   "pop": 7447
+   "pop": 7666
   },
   {
    "name": "苔噗菌",
    "kind": "微生物",
-   "pop": 7433
+   "pop": 7642
   },
   {
-   "name": "噗圆菌",
+   "name": "圆绒菌",
    "kind": "微生物",
-   "pop": 7274
-  },
-  {
-   "name": "蓝砂菌",
-   "kind": "微生物",
-   "pop": 6925
-  },
-  {
-   "name": "蓝软菌",
-   "kind": "微生物",
-   "pop": 6475
-  },
-  {
-   "name": "铃砂菌",
-   "kind": "微生物",
-   "pop": 6474
+   "pop": 7583
   },
   {
    "name": "毛糖菌",
    "kind": "微生物",
-   "pop": 6313
+   "pop": 7385
+  },
+  {
+   "name": "豆咕菌",
+   "kind": "微生物",
+   "pop": 7377
+  },
+  {
+   "name": "蓝砂菌",
+   "kind": "微生物",
+   "pop": 6720
   },
   {
    "name": "噗铃菌",
    "kind": "微生物",
-   "pop": 6218
+   "pop": 6438
+  },
+  {
+   "name": "噗圆菌",
+   "kind": "微生物",
+   "pop": 6323
   }
  ],
  "events": [
   {
    "icon": "🦠",
-   "who": "芽毛菌",
-   "what": "从雾圆菌里分化出来，成了一个新物种。",
-   "day": 172,
-   "tag": "第172天"
+   "who": "毛糖菌",
+   "what": "又分裂了好几轮，现在约 6920 个。",
+   "day": 174,
+   "tag": "第174天"
+  },
+  {
+   "icon": "🦠",
+   "who": "雾圆菌",
+   "what": "在热泉边挤成一团团，数量约 4852。（5 天里 2 次）",
+   "day": 175,
+   "tag": "第175天"
+  },
+  {
+   "icon": "🟢",
+   "who": "泡芽藻",
+   "what": "冒出一串串小氧气泡。",
+   "day": 175,
+   "tag": "第175天"
+  },
+  {
+   "icon": "🌙",
+   "who": "小月亮",
+   "what": "残月，静静看着下面。",
+   "day": 175,
+   "tag": "第175天"
   },
   {
    "icon": "☄️",
    "who": "陨石",
    "what": "带来一点点冰，蒸发成了雾。",
-   "day": 169,
-   "tag": "第169天"
+   "day": 176,
+   "tag": "第176天"
   },
   {
    "icon": "🦠",
-   "who": "苔噗菌",
-   "what": "在热泉边挤成一团团，数量约 7557。",
-   "day": 170,
-   "tag": "第170天"
-  },
-  {
-   "icon": "🦠",
-   "who": "铃砂菌",
-   "what": "又分裂了好几轮，现在约 6914 个。",
-   "day": 170,
-   "tag": "第170天"
-  },
-  {
-   "icon": "🦠",
-   "who": "圆芽菌",
-   "what": "在热泉边挤成一团团，数量约 3672。",
-   "day": 171,
-   "tag": "第171天"
-  },
-  {
-   "icon": "🟢",
-   "who": "泡芽藻",
-   "what": "把浅海染成淡绿色，数量约 5679。（5 天里 2 次）",
-   "day": 172,
-   "tag": "第172天"
+   "who": "噗铃菌",
+   "what": "在热泉边挤成一团团，数量约 6373。",
+   "day": 176,
+   "tag": "第176天"
   }
  ]
 }
