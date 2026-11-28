@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>豆星 · 第一人称</title>
+<title>3D豆星</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:-apple-system,"PingFang SC","Noto Sans SC",sans-serif;color:#eef1f8;touch-action:none;-webkit-user-select:none;user-select:none}
 canvas{display:block}
@@ -30,6 +30,8 @@ canvas{display:block}
 #back{position:fixed;right:10px;top:10px;color:#8fb4ff;font-size:13px;pointer-events:auto;text-decoration:none}
 #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
 #heat{position:fixed;inset:0;background:radial-gradient(transparent 40%,rgba(255,60,0,.45));opacity:0;pointer-events:none;transition:opacity .3s}
+#failbox{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+#failbox .btn2{background:#2a3352;color:#fff;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:10px 20px;font-size:15px;font-family:inherit;text-decoration:none}
 </style>
 </head>
 <body>
@@ -49,16 +51,113 @@ canvas{display:block}
 <div id="aim"></div>
 <div id="start"><h1 id="st">豆星</h1><p id="sp">加载中…</p><button id="go" style="display:none">出发</button></div>
 <script>
-addEventListener("error",e=>{const p=document.getElementById("sp");if(p)p.textContent+="\n\n出错了："+(e.message||e);});
-addEventListener("unhandledrejection",e=>{const p=document.getElementById("sp");if(p)p.textContent+="\n\n出错了："+(e.reason&&e.reason.message||e.reason);});
+/* 启动期的统一错误出口：three.js 加载失败、today.json 读不到、WebGL 不可用，
+   都在开始页上说人话，并给一个“重试”按钮（重新加载）和回日报的入口。不依赖任何库。
+   第一条（最具体的）错误显示后加锁，后面 throw 引发的 unhandledrejection / error
+   不会再把它覆盖成“页面出错了：…”，也不会把 retry=false 的错误重新长出重试按钮。 */
+(function () {
+  const $ = id => document.getElementById(id);
+  window.TPFailShown = false;
+  window.TPFail = function (title, detail, retry) {
+    if (window.TPFailShown) return false;          // 已经有更具体的错误在屏幕上了，别覆盖
+    window.TPFailShown = true;
+    const p = $("sp");
+    if (p) { p.style.whiteSpace = "pre-line"; p.textContent = title + (detail ? "\n\n" + detail : ""); }
+    const go = $("go"); if (go) go.style.display = "none";
+    const start = $("start"); if (start) start.style.display = "flex";
+    let box = $("failbox");
+    if (!box && start) {
+      box = document.createElement("div"); box.id = "failbox";
+      const b = document.createElement("button"); b.className = "btn2"; b.textContent = "重试";
+      b.onclick = () => location.reload();
+      const a = document.createElement("a"); a.className = "btn2"; a.href = "index.html"; a.textContent = "← 回日报";
+      box.appendChild(b); box.appendChild(a); start.appendChild(box);
+    }
+    if (box) box.style.display = retry === false ? "none" : "flex";
+    return true;
+  };
+  addEventListener("error", e => { if (!window.TPFailShown) window.TPFail("页面出错了：" + ((e && e.message) || e)); });
+  addEventListener("unhandledrejection", e => { if (!window.TPFailShown) window.TPFail("页面出错了：" + ((e && e.reason && e.reason.message) || (e && e.reason) || "")); });
+})();
 </script>
 <script type="module">
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+/* ---------- three.js：本地 vendor 优先，CDN 兜底 ----------
+   vendor/three.module.js 是 three.js r160 (0.160.0) 的官方 build 原版（MIT，见 vendor/LICENSE）。
+   自带的目的是不再依赖 unpkg 这一个单源：离线/被墙时也能打开。
+   本地拿不到（比如用 file:// 直接双击打开）就自动依次退回 unpkg / jsDelivr；
+   全部失败时在开始页给出可见的中文错误和“重试”按钮，而不是白屏。 */
+const THREE_SOURCES = [
+  { url: new URL("./vendor/three.module.js", import.meta.url).href, name: "本地 vendor/three.module.js" },
+  { url: "https://unpkg.com/three@0.160.0/build/three.module.js", name: "unpkg CDN" },
+  { url: "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", name: "jsDelivr CDN" }
+];
+function importWithTimeout(url, ms = 9000) {
+  return Promise.race([import(url), new Promise((_, rej) => setTimeout(() => rej(new Error("超时 " + Math.round(ms / 1000) + " 秒")), ms))]);
+}
+async function loadThree() {
+  const problems = [];
+  for (const src of THREE_SOURCES) {
+    try {
+      const mod = await importWithTimeout(src.url);
+      if (mod && mod.WebGLRenderer) {
+        if (problems.length) console.warn("[three] 以下来源失败，已用后备：\n" + problems.join("\n"));
+        else console.info("[three] 使用 " + src.name);
+        return mod;
+      }
+      problems.push(src.name + "：没有导出 WebGLRenderer");
+    } catch (e) { problems.push(src.name + "：" + ((e && e.message) || e)); }
+  }
+  throw new Error(problems.join("\n"));
+}
+/* WebGL 先探一下：没有就不必白下 1.2MB 的 three.js */
+function webglUsable() {
+  try {
+    const c = document.createElement("canvas");
+    return !!(window.WebGLRenderingContext && (c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl")));
+  } catch (e) { return false; }
+}
+if (!webglUsable()) {
+  window.TPFail("这个浏览器打不开 3D（WebGL 不可用）",
+    "可能是：浏览器太旧、隐私/省电设置关掉了 WebGL、或系统没开硬件加速。\n换用新版 Safari / Chrome，或打开硬件加速后再来。", false);
+  throw new Error("no webgl");
+}
+let THREE;
+try { THREE = await loadThree(); }
+catch (e) {
+  window.TPFail("3D 引擎没加载出来", "本地文件和两个 CDN 都没成功，多半是断网或被网络拦了：\n" + e.message);
+  throw e;
+}
 
+/* ---------- 数据：默认读同目录的相对路径 data/today.json ----------
+   ?data=… 保留为测试入口（可以是相对路径，也可以是完整 URL），会和原来一样加时间戳防缓存。 */
 const qs = new URLSearchParams(location.search);
-const DATA = qs.get("data") || "https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/today.json";
-const d = await fetch(DATA + (DATA.includes("?") ? "&" : "?") + "t=" + Date.now()).then(r => r.json()).catch(() => null);
-if (!d) { document.getElementById("sp").textContent = "数据加载失败，稍后再试"; throw new Error("no data"); }
+const DATA = qs.get("data") || "data/today.json";
+const DATA_URL = (() => {
+  try { return new URL(DATA, location.href); } catch (e) { return new URL("data/today.json", location.href); }
+})();
+DATA_URL.searchParams.set("t", Date.now());
+async function fetchJSON(url, tries = 2) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status + (r.statusText ? " " + r.statusText : ""));   // 404/500 也算失败，别拿错误页当数据
+      const text = await r.text();
+      try { return JSON.parse(text); } catch (e) { throw new Error("返回的不是 JSON（可能拿到的是服务器的错误页）"); }
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) await new Promise(res => setTimeout(res, 700));
+    }
+  }
+  throw lastErr;
+}
+let d;
+try { d = await fetchJSON(DATA_URL.href); }
+catch (e) {
+  window.TPFail("今天的 today.json 没读到", "请求：" + DATA_URL.href + "\n原因：" + ((e && e.message) || e) + "\n检查一下网络，或者稍后点“重试”。");
+  throw e;
+}
+if (!d || typeof d !== "object") { window.TPFail("today.json 是空的或格式不对", String(d)); throw new Error("bad data"); }
 
 const S = d.stats || {};
 const temp = S["地表温度°C"] ?? 20, ocean = S["海洋%"] ?? 0, air = S["大气%"] ?? 30, oxy = S["氧气%"] ?? 0;
@@ -66,14 +165,15 @@ const events = d.events || [];
 const species = d.species || [];
 const label = d.day_label || ("第 " + d.day + " 天");
 const hasIcon = i => events.some(e => e.icon === i);
-const raining = hasIcon("🌧️") || d.weather === "雨";
-// 雨势 1 小雨 / 2 中雨 / 3 暴雨（旧数据没有这个字段：打雷当暴雨，否则中雨）
-const rainLv = raining ? (d.rain || (hasIcon("⚡") ? 3 : 2)) : 0;
+const hasWeather = typeof d.weather === "string" && d.weather.trim().length > 0;
+const raining = hasWeather ? d.weather === "雨" : hasIcon("🌧️");
+// rain level follows final weather when present; old records without weather can infer it from events.
+const rainLv = raining ? (d.rain || (!hasWeather && hasIcon("⚡") ? 3 : 2)) : 0;
 const RAIN = [null, { n: 500, v: 11, sz: 0.06, far: 65, gray: 0.22, op: 0.6 }, { n: 1500, v: 18, sz: 0.08, far: 55, gray: 0.35, op: 0.8 }, { n: 3200, v: 27, sz: 0.1, far: 38, gray: 0.5, op: 0.9 }][rainLv];
 const seaMini = "#" + new THREE.Color(0x2f86e0).lerp(new THREE.Color(0xa84e30), Math.min(1, d.rust || 0) * 0.8).getHexString();   // 小地图海水，随铁锈变红
 // 月相：豆星的月亮 8 天一轮（0 新月 → 4 满月），跟日报同一个数
 const moonPhase = ((d.moon ?? d.day ?? 0) % 8 + 8) % 8;
-const icy = d.weather === "冰" || hasIcon("❄️");
+const icy = hasWeather ? d.weather === "冰" : hasIcon("❄️");
 const kindsAlive = new Set(species.map(s => s.kind));
 
 // ---------- 角色：跟着当天的世界走 ----------
@@ -155,7 +255,11 @@ if (kindsAlive.has("植物")) for (let i = 0; i < 40 * SC * SC; i++) { const x =
 // ---------- 场景 ----------
 let renderer;
 try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
-catch (err) { document.getElementById("sp").textContent = "这个浏览器打不开 3D（WebGL 不可用），换个浏览器或打开硬件加速再试。"; goBtn.style.display = "none"; throw err; }
+catch (err) {
+  window.TPFail("这个浏览器打不开 3D（WebGL 创建失败）", "浏览器说它支持 WebGL，但没能创建 3D 画面：可能是标签页太多显存不够，或硬件加速刚被系统关掉。\n关掉别的标签页、或换个浏览器再试。", false);
+  goBtn.style.display = "none";
+  throw err;
+}
 renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
 document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
@@ -198,10 +302,31 @@ function mesh(list, mat) {
 mesh(blocks, new THREE.MeshLambertMaterial({ vertexColors: true, map: pixTex(3, 0.78) }));
 if (lavaBlocks.length) { mesh(lavaBlocks.map(b => [b[0], b[1], b[2], new THREE.Color(0xff6a1a)]), new THREE.MeshBasicMaterial({ vertexColors: true, map: pixTex(11, 0.7) }));
   const glow = new THREE.PointLight(0xff6a1a, 30, 14); glow.position.set(VX + 0.5, H[VX][VZ] + 2, VZ + 0.5); scene.add(glow); }
-for (const [x, z, col, w, h, wd, y0] of deco) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, wd), new THREE.MeshLambertMaterial({ color: col }));
-  m.position.set(x + 0.5, H[x][z] + h / 2 + (y0 ? 0.6 : 0), z + 0.5); scene.add(m);
-  if (y0) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), new THREE.MeshLambertMaterial({ color: 0x6b4a33 })); t.position.set(x + 0.5, H[x][z] + 0.4, z + 0.5); scene.add(t); }
+// 装饰物（墓碑 / 植物 / 树干）：原来每棵都新建一份 BoxGeometry + MeshLambertMaterial（最多 161 棵 → 300+ 个 draw call）。
+// 现在共用下面这块单位立方体几何体，一次性塞进一个 InstancedMesh，靠 instanceColor 保留各自颜色：
+// 外观和逐块渲染一致（同一套 Lambert 光照），draw call 降到 1。
+function batchBoxes(items, castName) {
+  if (!items.length) return null;
+  const im = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial(), items.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  items.forEach((it, i) => {
+    p.set(it.x, it.y, it.z); s.set(it.w, it.h, it.d);
+    m4.compose(p, q, s); im.setMatrixAt(i, m4); im.setColorAt(i, it.c);
+  });
+  im.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  im.frustumCulled = false;   // 实例散布整座岛，包围盒关掉省得被误剔除
+  scene.add(im);
+  if (castName) console.info(`[perf] ${castName}：${items.length} 件 → 1 个 InstancedMesh`);
+  return im;
+}
+{
+  const decoItems = [];
+  for (const [x, z, col, w, h, wd, y0] of deco) {
+    decoItems.push({ x: x + 0.5, y: H[x][z] + h / 2 + (y0 ? 0.6 : 0), z: z + 0.5, w, h, d: wd, c: new THREE.Color(col) });
+    if (y0) decoItems.push({ x: x + 0.5, y: H[x][z] + 0.4, z: z + 0.5, w: 0.25, h: 0.8, d: 0.25, c: new THREE.Color(0x6b4a33) });   // 树干
+  }
+  batchBoxes(decoItems, "装饰物/树干");
 }
 let waterSurf = null;
 if (seaLevel) {
@@ -217,11 +342,11 @@ if (seaLevel) {
   under.geometry = water.geometry; under.rotation.x = -Math.PI / 2; under.position.copy(water.position); scene.add(under);
   waterSurf = water;
 }
-// 方块云：慢慢飘，下雨时更多更灰
+// 方块云：慢慢飘，下雨时更多更灰；几何体共用一块单位立方体，大小用 scale 表示（不再每朵一份 BoxGeometry）
 const clouds = new THREE.Group(); scene.add(clouds);
 { const cm = new THREE.MeshLambertMaterial({ color: raining ? 0x8d929c : icy ? 0xd8dde4 : 0xffffff, transparent: true, opacity: raining || icy ? 0.92 : 0.85 });
   for (let i = 0; i < (raining || icy ? 26 : 12) * SC * SC; i++) { const w = 3 + Math.floor(hash(i, 5) * 6), dd = 2 + Math.floor(hash(5, i) * 5);
-    const c = new THREE.Mesh(new THREE.BoxGeometry(w, 1, dd), cm); c.position.set(hash(i, 9) * N * 1.6 - N * 0.3, 22 + hash(9, i) * 3, hash(i, 13) * N * 1.6 - N * 0.3); clouds.add(c); } }
+    const c = new THREE.Mesh(box, cm); c.scale.set(w, 1, dd); c.position.set(hash(i, 9) * N * 1.6 - N * 0.3, 22 + hash(9, i) * 3, hash(i, 13) * N * 1.6 - N * 0.3); clouds.add(c); } }
 // 月亮
 // 按月相画亮面：先画暗盘，再画亮的半边，最后用椭圆补上/挖掉明暗交界
 function moonTexture(ph) {
@@ -271,7 +396,7 @@ let boltLine = null, boltT = 4;
 const boltCore = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, depthWrite: false });
 const boltGlow = new THREE.MeshBasicMaterial({ color: 0x9fc4ff, fog: false, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
 const boltBox = new THREE.BoxGeometry(1, 1, 1); let boltLight = null, boltSpark = null, boltSparkV = [], boltFl = [];
-if (hasIcon("⚡")) { boltLine = new THREE.Group(); boltLine.visible = false; scene.add(boltLine);
+if ((!hasWeather && hasIcon("⚡")) || (hasWeather && d.weather === "雨" && hasIcon("⚡"))) { boltLine = new THREE.Group(); boltLine.visible = false; scene.add(boltLine);
   boltLight = new THREE.PointLight(0xcfe0ff, 0, 60); scene.add(boltLight);
   boltSpark = particles(120, 0xfff4b0, 0.18); boltSpark.material.blending = THREE.AdditiveBlending; for (let i = 0; i < 120; i++) boltSparkV.push({ p: null, v: [0, 0, 0] }); }
 function boltSeg(a, b, w) {
@@ -312,10 +437,23 @@ if (seaLevel) { const cand = [];
   for (let x = 2; x < N - 2; x++) for (let z = 2; z < N - 2; z++) if (H[x][z] < seaLevel - 1) cand.push([Math.hypot(x - VX, z - VZ), x, z]);
   cand.sort((a, b) => a[0] - b[0]);
   for (const [, x, z] of cand) { if (vents.length >= 4) break; if (vents.every(([a, b]) => Math.hypot(a - x, b - z) > 4)) vents.push([x, z]); } }
-const ventMat = new THREE.MeshLambertMaterial({ color: 0x3a2f2a }), ventTop = new THREE.MeshBasicMaterial({ color: 0xff8a3a });
-for (const [x, z] of vents) { const hgt = 1.4 + hash(x, z);
-  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.7, hgt, 0.7), ventMat); ch.position.set(x + 0.5, H[x][z] + hgt / 2, z + 0.5); scene.add(ch);
-  const tp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.4), ventTop); tp.position.set(x + 0.5, H[x][z] + hgt + 0.05, z + 0.5); scene.add(tp); }
+// 热泉口：烟囱高度不一，也用一块单位立方体 + 缩放的 InstancedMesh 画（原来每个 2 个 mesh、2 份几何体）
+if (vents.length) {
+  const chim = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial({ color: 0x3a2f2a }), vents.length);
+  const tops = new THREE.InstancedMesh(box, new THREE.MeshBasicMaterial({ color: 0xff8a3a }), vents.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  vents.forEach(([x, z], i) => {
+    const hgt = 1.4 + hash(x, z);
+    p.set(x + 0.5, H[x][z] + hgt / 2, z + 0.5); s.set(0.7, hgt, 0.7);
+    m4.compose(p, q, s); chim.setMatrixAt(i, m4);
+    p.set(x + 0.5, H[x][z] + hgt + 0.05, z + 0.5); s.set(0.4, 0.1, 0.4);
+    m4.compose(p, q, s); tops.setMatrixAt(i, m4);
+  });
+  chim.instanceMatrix.needsUpdate = true; tops.instanceMatrix.needsUpdate = true;
+  chim.frustumCulled = false; tops.frustumCulled = false;
+  scene.add(chim); scene.add(tops);
+  console.info(`[perf] 热泉：${vents.length * 2} 件 → 2 个 InstancedMesh`);
+}
 // ---------- 叠层石：按 today.json 里每块的“每列一摞”剖面，绕中轴转成一圈圈小方块；奶黄=菌席沉淀，红褐=泥沙 ----------
 const stromas = [];
 if (seaLevel && (d.stromatolites || []).length) {
@@ -435,8 +573,13 @@ const hud = document.getElementById("hud"), card = document.getElementById("card
 const flash = document.getElementById("flash"), heat = document.getElementById("heat");
 let toastT = 0; function say(t) { toast.textContent = t; toast.style.display = "block"; toastT = Math.min(6, 2.2 + t.length / 25); }   // 长提示多停一会儿
 function updHud() { const n = markers.filter(m => m.found).length;
-  hud.innerHTML = `<b>${d.world || "豆星"} · ${label}</b><br>${d.era || ""} · ${d.weather || ""} · ${temp}°C<br>你是：${role.name}（${role.kind}）<br>已发现事件 ${n}/${markers.length}` +
-    (n === markers.length && n ? "<br>✨ 今天的豆星逛完了" : ""); }
+  hud.replaceChildren();
+  const title = document.createElement("b"); title.textContent = `${d.world || "豆星"} · ${label}`; hud.appendChild(title);
+  hud.appendChild(document.createElement("br")); hud.appendChild(document.createTextNode(`${d.era || ""} · ${d.weather || ""} · ${temp}°C`));
+  hud.appendChild(document.createElement("br")); hud.appendChild(document.createTextNode(`你是：${role.name}（${role.kind}）`));
+  hud.appendChild(document.createElement("br")); hud.appendChild(document.createTextNode(`已发现事件 ${n}/${markers.length}`));
+  if (n === markers.length && n) { hud.appendChild(document.createElement("br")); hud.appendChild(document.createTextNode("✨ 今天的豆星逛完了")); }
+}
 updHud();
 const mapC = document.getElementById("map"), mg = mapC.getContext("2d"), K = 240 / N;
 const mapBase = document.createElement("canvas"); mapBase.width = mapBase.height = 240;
@@ -679,8 +822,11 @@ function step(dt) {
     const dist = Math.hypot(m.s.position.x - px, m.s.position.z - pz);
     if (dist < 2.6) { near = m; if (!m.found) { m.found = true; m.ring.material.color.set(0x7affb0); updHud(); } }
   }
-  if (near) { card.style.display = "block"; card.innerHTML = (near.ev.tag ? `<div class="tag">${near.ev.tag}</div>` : "") + `${near.ev.icon} <b></b>：<span></span>`;
-    card.querySelector("b").textContent = near.ev.who; card.querySelector("span").textContent = near.ev.what; }
+  if (near) { card.style.display = "block"; card.replaceChildren();
+    if (near.ev.tag) { const tag = document.createElement("div"); tag.className = "tag"; tag.textContent = near.ev.tag; card.appendChild(tag); }
+    card.appendChild(document.createTextNode((near.ev.icon || "") + " "));
+    const who = document.createElement("b"); who.textContent = near.ev.who || ""; card.appendChild(who);
+    card.appendChild(document.createTextNode("：")); const what = document.createElement("span"); what.textContent = near.ev.what || ""; card.appendChild(what); }
   else card.style.display = "none";
   // 火山烟
   { const a = smoke.geometry.attributes.position.array; const vol = hasIcon("🌋") ? 1 : 0.35;

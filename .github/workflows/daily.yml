@@ -1,20 +1,66 @@
 name: daily-world
+
+# 说明：每日发布默认由外部调度器调用 tick.sh 完成（tick.sh 是唯一发布器）。
+# 本 workflow 只保留手动入口，用于 CI / 故障恢复：
+#   * 手动触发时同样走 tick.sh（同上机同一条链路：同步远端 → 隔离推演 → 校验 → 单一 commit → 非强制 push）
+#   * 故意不配 schedule cron：外部定时器仍在运行，避免两套定时器重复发布
+#   * 不依赖 GitHub 的 concurrency 做互斥：即使外部 runner 并发，tick.sh 的
+#     "fetch → 比对 base → 普通 push（CAS）" 也会在非快进时失败退出，绝不 force 覆盖
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "FORCE：同一天也再推演一期（默认关闭，正常情况靠日期幂等跳过）"
+        type: boolean
+        default: false
+
+concurrency:
+  group: daily-world
+  cancel-in-progress: false
+
 permissions:
   contents: write
+
 jobs:
   tick:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install pillow
-      - run: python world.py
-      - run: |
-          git config user.name "tiny-planet-bot"
-          git config user.email "actions@github.com"
-          git add data
-          git commit -m "Day $(python -c 'import json;print(json.load(open(\"data/today.json\"))[\"day\"])')" || exit 0
-          git push
+      # 凭证由下方 GITHUB_TOKEN 经 tick.sh 临时 GIT_ASKPASS 传入，
+      # checkout 不持久化凭证，也不把 token 写进 remote URL 或日志。
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      # 测试全部在临时目录里跑（临时 git 仓库 + 拷贝的 world.py/data），
+      # 绝不读写仓库里的真实 data/。同时发现 tests/（world 侧）与 scripts/tests/（发布侧）。
+      - name: Unit tests (isolated)
+        run: |
+          if [ -d tests ]; then python -m unittest discover -s tests -v; fi
+          python -m unittest discover -s scripts/tests -v
+
+      # tick.sh 内部：校验工作区干净 → fetch/同步远端最新（避免过期 checkout）
+      # → 临时目录推演 → 校验产物 → 一次性写 data/ → 单一 commit → 非强制 push。
+      - name: Tick (simulate + atomic commit + push)
+        env:
+          PYTHON: python
+          FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.force) && '1' || '0' }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GIT_AUTHOR_NAME: tiny-planet-bot
+          GIT_AUTHOR_EMAIL: actions@github.com
+          GIT_COMMITTER_NAME: tiny-planet-bot
+          GIT_COMMITTER_EMAIL: actions@github.com
+        run: bash tick.sh

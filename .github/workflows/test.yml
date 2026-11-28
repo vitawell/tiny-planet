@@ -1,0 +1,54 @@
+name: tests
+
+# 只做校验：只读权限，测试全部在临时目录（临时 git 仓库 + 拷贝的 data）里跑，
+# 不会读写仓库里的真实 data/，也不会访问远端。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Shellcheck (runner 自带则跑)
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -x tick.sh
+          else
+            echo "shellcheck 不可用，跳过"
+          fi
+
+      # tests/（world 侧）与 scripts/tests/（发布侧）都要跑。
+      - name: Unit tests (isolated temp repos)
+        run: |
+          python -m unittest discover -s tests -v
+          python -m unittest discover -s scripts/tests -v
+
+      - name: 确认真实 data/ 未被测试改动
+        run: git diff --exit-code -- data

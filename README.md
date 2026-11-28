@@ -1,17 +1,25 @@
 # 豆星 · 轻量平面微型世界沙盒
 
-一颗扁平风格的小星球，每天北京时间 8:00 由 GitHub Actions 推演一天：
-火山、河流、冰盖、月亮等非生物，与绒尾兔、玻璃鱼、跳跳菇、风铃树、小石人、荧光藻等生物，各自发生今日事件。
+一颗扁平风格的小星球，由现有外部定时器每天北京时间 8:00 调用仓库最新版 `tick.sh` 发布一期日报，每期推进 0–5 个模拟天：
+火山、海洋、冰盖、月亮等非生物，与逐步诞生的微生物、藻类、鱼、植物、小兽等生物，各自发生今日事件。
+
+[阅读豆星日报](https://vitawell.github.io/tiny-planet/) · [进入 3D 豆星](https://vitawell.github.io/tiny-planet/play.html)
 
 每天出一期日报，节奏随变化自适应：
 - 平淡时：一期合并最多 5 个模拟天（如“第 15–19 天”），重复事件合并计数，指标给出起止变化
 - 热闹时：里程碑单独成一期；一期最多讲 3 件大事，讲不完的进 `backlog`，后几期以“（续 n）”接着讲，期间世界不推进
-- 可调参数在 `world.py` 顶部：`BUDGET`、`MAX_DAYS`、`MAX_BIG`、`MAX_MILESTONE`
+- 可调参数在 `world.py` 的「自适应日报」部分：`BUDGET`、`MAX_DAYS`、`MAX_BIG`、`MAX_MILESTONE`
+
+> **2026-11-28 演化规则升级**：保留现有存档与当天日报，从下一次推演起使用无向下截断偏差的种群取整、同类共享承载量，以及可见的再演化事件。它会改变之后的随机序列和世界线；下文旧版本的「不改变主推演」与长程统计只描述当时的独立功能实验，不代表此次规则升级前后结果相同。事件重要性改用结构化类型，不再依赖文案。
 
 - `world.py`：推演与绘图（纯 Python + Pillow）
 - `data/today.json`：今日数据（面板读取）
 - `data/planet.png`：今日星球图
-- `data/state.json`：世界持久状态（最近 30 天事件）
+- `data/state.json`：世界持久状态（最近 30 期事件；一期可能含多个模拟天）
+- `tick.sh`：统一发布器，供原有外部定时器和 Actions 手动备用入口使用
+- `tests/`：演化规则与日报回归测试
+- `scripts/tests/`：发布链路隔离测试
+- `vendor/`：随站点发布的 three.js 及其原始许可证
 
 ![today](data/planet.png)
 
@@ -67,7 +75,7 @@
 
 ## 蜘蛛侠模式
 
-第一人称页面右侧 🕸️（桌面按 Q）打开：点屏幕上 40 格内看得见的方块，蛛丝射过去把你拉过去，打中侧面会翻上顶面（桌面也可按 F 射向准星）。微生物只能在水里荡，粘不住水面，不会落进岩浆。玩法借鉴 [terryHu7/homecraft](https://github.com/terryHu7/homecraft) 的 web-zip。
+3D 页面右侧 🕸️（桌面按 Q）打开：点屏幕上 40 格内看得见的方块，蛛丝射过去把你拉过去，打中侧面会翻上顶面（桌面也可按 F 射向准星）。所有物种均可自由活动，蛛丝可打到海底，但不能粘住水面。玩法借鉴 [terryHu7/homecraft](https://github.com/terryHu7/homecraft) 的 web-zip。
 
 ## 下雪与开场俯冲
 
@@ -90,3 +98,41 @@
 ## 闪电特效
 
 当天有 ⚡ 事件时会打雷：主干粗、往下逐渐变细，带随机细枝杈；每段是白色光芯加一层蓝白发光外壳，会连闪两三下，落点爆出火花并照亮四周，雷声按距离延迟传来（全合成音效）。
+
+## 运行与发布
+
+需要 Bash、Git、Python 3.11+ 和 Pillow。在有虚拟环境的 Python 环境安装依赖：
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+外部定时器保持每天北京时间 08:00 运行，**每次读取仓库最新的 `tick.sh`**。运行环境需配置可写仓库的 `GITHUB_TOKEN` / `GH_TOKEN`，或已有可用 Git 凭证；不要把 token 拼进 URL、脚本或日志。脚本不再使用 `apicall`，也不再静默安装依赖。
+
+```sh
+bash tick.sh                   # 发布一期；同一北京时间日期重复执行会跳过
+DRY_RUN=1 bash tick.sh         # 仅验证，不提交、不推送
+FORCE=1 bash tick.sh           # 明确要求当天再出一期时才使用
+```
+
+发布器从远端最新代码和存档建立临时副本，在隔离目录中推演、验证 JSON 与 PNG，再将三个数据文件放进**一个提交**并普通推送。失败不覆盖本地工作区；若其他发布者已推进远端，推送被拒，重新运行会重新读取远端状态，不强制推送、不重放过期的世界结果。本地尚未推送的代码和数据不会参与每日推演。
+
+GitHub → Actions → **daily-world** → Run workflow 是手动备用入口，调用相同的 `tick.sh`，默认不会强制重复出报。它故意不再增加第二个每日定时器。
+
+仅在临时副本里试验 `world.py`：直接运行 `python world.py` 会写入所在目录的 `data/`。线上页面使用相对路径读取 JSON 和图片；3D 引擎优先使用本地 `vendor/three.module.js`，网络备用源失败时显示可重试错误，不应白屏。页面必须通过 HTTP(S) 或支持模块加载的预览环境打开，不能依赖直接双击 `file://`。
+
+## 测试
+
+```sh
+python -m unittest discover -s tests -v
+python -m unittest discover -s scripts/tests -v
+bash scripts/local_test.sh
+```
+
+测试使用临时存档和本地 bare Git 远端，不推演或推送正式世界。CI 在 push / pull request 时运行，另外检查真实 `data/` 未被修改。
+
+## 许可
+
+项目代码采用 [MIT](LICENSE) 许可证。随站点发布的 three.js 0.160.0 保留上游 [MIT 许可证](vendor/LICENSE)；第三方作品及所引科学文献的权利仍属于各自权利人。

@@ -20,6 +20,8 @@ li{background:#18203a;border-radius:12px;padding:12px 14px;margin:10px 0;line-he
 .stats span{background:#18203a;border-radius:999px;padding:4px 10px;font-size:13px;color:#c8d1ea}
 footer{margin-top:24px;font-size:12px;color:#6f7a99}
 a{color:#8fb4ff}
+.retry{display:none;margin-top:12px;text-align:center}
+.retry button{background:#2a3352;color:#fff;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:10px 22px;font-size:15px;font-family:inherit}
 </style>
 </head>
 <body>
@@ -27,7 +29,7 @@ a{color:#8fb4ff}
 <h1 id="title">豆星</h1>
 <div class="meta" id="meta">加载中…</div>
 <img id="planet" alt="今日星球全景">
-<a href="play.html" style="display:block;text-align:center;margin:14px 0 0;background:#4b7bff;color:#fff;border-radius:999px;padding:11px;text-decoration:none;font-weight:600">🎮 进入豆星，第一人称逛今天</a>
+<a href="play.html" style="display:block;text-align:center;margin:14px 0 0;background:#4b7bff;color:#fff;border-radius:999px;padding:11px;text-decoration:none;font-weight:600">🎮 进入豆星，第三人称逛今天</a>
 <div class="trend" id="trend"></div>
 <ul id="events"></ul>
 <div class="more" id="more"></div>
@@ -35,24 +37,55 @@ a{color:#8fb4ff}
 <footer>每天北京时间 08:00 出一期：平淡时几天合成一期，热闹时一天拆成几期 · <a href="https://github.com/vitawell/tiny-planet">GitHub</a></footer>
 </main>
 <script>
-const base="https://raw.githubusercontent.com/vitawell/tiny-planet/main/data/";
-fetch(base+"today.json?t="+Date.now()).then(r=>r.json()).then(d=>{
-  const label=d.day_label||("第 "+d.day+" 天");
-  document.title=d.world+" · "+label;
-  document.getElementById("title").textContent=d.world+" · "+label;
-  const tr=Object.entries(d.trend||{});
-  if(tr.length) document.getElementById("trend").textContent="这几天："+tr.map(([k,v])=>k+" "+v).join("，");
-  if(d.more_tomorrow) document.getElementById("more").textContent="这一天发生的事太多，明天接着讲。";
-  document.getElementById("meta").textContent=d.date+" · "+(d.era||"")+" · "+d.season+" · "+d.weather;
-  document.getElementById("planet").src=base+"planet.png?d="+d.day;
-  const ul=document.getElementById("events");
-  (d.events||[]).forEach(e=>{const li=document.createElement("li");
-    li.innerHTML=(e.tag?`<span class="tag">${e.tag}</span>`:"")+`${e.icon} <span class="who"></span>：<span class="what"></span>`;
-    li.querySelector(".who").textContent=e.who;li.querySelector(".what").textContent=e.what;ul.appendChild(li);});
-  const st=document.getElementById("stats");
-  Object.entries(d.stats||{}).forEach(([k,v])=>{const s=document.createElement("span");s.textContent=k+" "+v;st.appendChild(s);});
-  (d.species||[]).forEach(x=>{const s=document.createElement("span");s.textContent=x.name+"（"+x.kind+"）"+x.pop;st.appendChild(s);});
-}).catch(()=>{document.getElementById("meta").textContent="数据加载失败，稍后再试";});
+const base = new URL("data/", location.href);
+const todayUrl = new URL("today.json", base);
+todayUrl.searchParams.set("t", Date.now());
+const planet = document.getElementById("planet");
+planet.addEventListener("error", () => { planet.alt = "星球图片加载失败"; planet.style.display = "none"; });
+function showLoadError(message) {
+  const meta = document.getElementById("meta"); meta.textContent = message;
+  let box = document.getElementById("load-retry");
+  if (!box) {
+    box = document.createElement("div"); box.id = "load-retry"; box.className = "retry";
+    const b = document.createElement("button"); b.type = "button"; b.textContent = "重试";
+    b.onclick = () => location.reload(); box.appendChild(b); meta.after(box);
+  }
+  box.style.display = "block";
+}
+async function loadToday() {
+  try {
+    const r = await fetch(todayUrl.href, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status + (r.statusText ? " " + r.statusText : ""));
+    const text = await r.text();
+    let d;
+    try { d = JSON.parse(text); } catch (e) { throw new Error("返回内容不是有效 JSON"); }
+    if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("数据格式不对");
+    const label=d.day_label||("第 "+d.day+" 天");
+    document.title=(d.world||"豆星")+" · "+label;
+    document.getElementById("title").textContent=(d.world||"豆星")+" · "+label;
+    const tr=Object.entries(d.trend||{});
+    if(tr.length) document.getElementById("trend").textContent="这几天："+tr.map(([k,v])=>k+" "+v).join("，");
+    if(d.more_tomorrow) document.getElementById("more").textContent="这一天发生的事太多，明天接着讲。";
+    document.getElementById("meta").textContent=(d.date||"")+" · "+(d.era||"")+" · "+(d.season||"")+" · "+(d.weather||"");
+    planet.style.display="block";
+    planet.src=new URL("planet.png", base).href+"?d="+encodeURIComponent(d.day ?? "");
+    const ul=document.getElementById("events"); ul.replaceChildren();
+    (Array.isArray(d.events)?d.events:[]).forEach(e=>{
+      const li=document.createElement("li");
+      if (e.tag) { const tag=document.createElement("span"); tag.className="tag"; tag.textContent=e.tag; li.appendChild(tag); li.appendChild(document.createTextNode(" ")); }
+      li.appendChild(document.createTextNode((e.icon||"")+" "));
+      const who=document.createElement("span"); who.className="who"; who.textContent=e.who||""; li.appendChild(who);
+      li.appendChild(document.createTextNode("：")); li.appendChild(document.createTextNode(e.what||"")); ul.appendChild(li);
+    });
+    const st=document.getElementById("stats"); st.replaceChildren();
+    Object.entries(d.stats||{}).forEach(([k,v])=>{const s=document.createElement("span");s.textContent=k+" "+v;st.appendChild(s);});
+    (Array.isArray(d.species)?d.species:[]).forEach(x=>{const s=document.createElement("span");s.textContent=(x.name||"")+"（"+(x.kind||"")+"）"+(x.pop||"");st.appendChild(s);});
+    const retry=document.getElementById("load-retry"); if(retry) retry.style.display="none";
+  } catch (e) {
+    showLoadError("日报加载失败："+((e&&e.message)||e)+"。请检查网络或稍后重试。");
+  }
+}
+loadToday();
 </script>
 </body>
 </html>

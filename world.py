@@ -12,6 +12,16 @@ SEASONS = ["春", "夏", "秋", "冬"]
 IRON0 = 100          # 海水溶解铁初始储量（%）
 IRON_PER_O2 = 60     # 每 1% 氧气能锈掉多少铁
 
+# 演化规则版本：2 = 随机取整的整数种群 + 同 kind 共用承载量 + 结构化事件 + 天气取最终环境值。
+# 标记只对“下一次推演”生效：存档里已有的历史（log/backlog）不回溯重算，旧 state 直接接着演。
+RULES_VERSION = 2
+
+# 事件重要性（rank）：3 里程碑，2 物种诞生/灭绝等大事，1 日常。结构化事件 = (icon, who, what, rank, kind)，
+# 前三个位置与旧的 (icon, who, text) 元组完全兼容，所以日报事件契约 icon/who/what/day/tag 不变。
+RANK_ROUTINE, RANK_EVENT, RANK_MILESTONE = 1, 2, 3
+KIND_RANK = {"routine": RANK_ROUTINE, "birth": RANK_EVENT, "extinct": RANK_EVENT,
+             "first": RANK_EVENT, "major": RANK_EVENT, "milestone": RANK_MILESTONE}
+
 ERAS = [
     "熔岩纪", "冷却纪", "雨海纪", "原始汤纪", "微生物纪",
     "光合纪", "多细胞纪", "登陆纪", "森林纪", "动物纪",
@@ -38,7 +48,7 @@ def clamp(v, a, b): return max(a, min(b, v))
 
 def init_state():
     return {
-        "world": "豆星", "day": 0, "seed": 20261007, "era": 0,
+        "world": "豆星", "day": 0, "seed": 20261007, "era": 0, "rules_version": RULES_VERSION,
         "env": {"temp": 1200, "ocean": 0, "air": 5, "organics": 0, "oxygen": 0, "volcano": 80, "moon": 0},
         "species": [], "extinct": 0, "milestones": [], "log": [], "proto_cells": 0,
     }
@@ -72,12 +82,124 @@ def add_species(s, rng, kind, pop, parent=None):
 def has(s, kind): return any(x["kind"] == kind and x["pop"] > 0 for x in s["species"])
 
 
+def event(icon, who, what, rank=RANK_ROUTINE, kind="routine"):
+    """结构化事件：(icon, who, what, rank, kind)。rank/kind 显式带语义，日报不再靠文字猜重要性。"""
+    return (icon, who, what, rank, kind)
+
+
+def ev_rank(x):
+    """事件重要性。结构化事件直接读字段；兼容历史 3 元组与会话里遗留的旧 dict（按 rank/kind，不匹配文案）。"""
+    if isinstance(x, dict):
+        r = x.get("rank")
+        if r:
+            return int(r)
+        return KIND_RANK.get(x.get("kind") or "routine", RANK_ROUTINE)
+    if len(x) >= 5:
+        return int(x[3])
+    return RANK_ROUTINE                  # 遗留 3 元组：没有结构化信息，按日常处理
+
+
+def ev_kind(x):
+    if isinstance(x, dict):
+        return x.get("kind") or "routine"
+    return x[4] if len(x) >= 5 else "routine"
+
+
+def stoch_round(x, rng):
+    """随机取整：保持整数契约，去掉 int() 向下取整的系统性偏差。
+    旧版 int() 每天把增量的小数部分抹掉，小种群几乎长不起来，只能一路走向灭绝；
+    随机取整让期望增量无偏，pop=1 也能靠运气把增量攒成新个体。"""
+    if x <= 0:
+        return 0
+    f = math.floor(x)
+    return int(f) + (1 if rng.random() < (x - f) else 0)
+
+
+def kind_cap(e, kind):
+    """同一个 kind 的物种共用一个承载量（生态位总量），而不是每个物种各拿一份 cap。"""
+    _icon, hab, _r, k = KINDS[kind]
+    cap_sea = e["ocean"] * 100
+    cap_land = (e["oxygen"] * 30) if e["oxygen"] > 20 else 0
+    return max(5.0, (cap_sea if hab == "海" else cap_land) * k)
+
+
+MIN_RETAIN = 0.55    # 单日最多减到这个比例（保留率下限，不是衰减幅度）：超载/规则升级时也不会一夜抹平一个 kind
+                     # （对应世代重叠、休眠体、冰缝里的避难所）
+
+
+def pop_step(e, species, iced, rng):
+    """一天的种群更新。同 kind logistic（N 用该 kind 的总数，避免每个物种独占一份 cap），
+    整数种群用随机取整。返回当天灭绝的物种列表。
+
+    方程用 Beverton–Holt 的有界形式 n' = n(1+r) / (1 + r·N/K)，而不是 n + r·n·(1-N/K)：
+    后者在 N ≫ K 时会让 (1-N/K) 变成很大的负数，一次就把整群算成负人口、次日全灭。
+    BH 的系数恒为正、且 n' ≤ n(1+r)，超载时只会平滑衰减。衰减日先按保留率下限 MIN_RETAIN 托底（噪声前的
+    保留系数，不是衰减幅度；之后的 gauss 噪声 ±5% 可让结果略低于该比例），对应世代重叠/休眠体/冰缝避难所，
+    保证规则升级首日（当前存档 N≈13·cap）也不会把整个 kind 一夜抹掉。"""
+    total = {}
+    for sp in species:
+        if sp["pop"] > 0:
+            total[sp["kind"]] = total.get(sp["kind"], 0) + sp["pop"]
+    died = []
+    for sp in species:
+        if sp["pop"] <= 0: continue
+        _icon, hab, r, _k = KINDS[sp["kind"]]
+        cap = kind_cap(e, sp["kind"])
+        n = float(sp["pop"])
+        tr = sp.get("traits", {})
+        fit = 0.75 + 0.5 * (tr.get("耐热", 0.5) if e["temp"] > 50 else 1 - tr.get("耐热", 0.5))
+        fit *= 0.75 + 0.5 * (tr.get("耐旱", 0.5) if e["ocean"] < 20 else 1 - tr.get("耐旱", 0.5))
+        growth = r * (0.7 + tr.get("繁殖", 0.5) * 0.6) * fit
+        if iced and hab == "海": growth *= 0.5          # 冰下太冷，长得慢
+        nxt = n * (1 + growth) / (1 + growth * total[sp["kind"]] / cap)
+        if nxt < n:                                    # 衰减时至少保留 MIN_RETAIN 比例，别一夜清零
+            nxt = max(nxt, n * MIN_RETAIN)
+        nxt += rng.gauss(0, nxt * 0.05)
+        sp["pop"] = max(0, stoch_round(nxt, rng))
+        if sp["pop"] == 0:
+            died.append(sp)
+    return died
+
+
+def freeze_thaw_boost(e, species, rng):
+    """解冻后微生物吃浓缩有机物。只增不减：分配量被剩余整数空间 int(cap)-已有总数 硬约束，
+    涨完 sum(pop) ≤ int(cap)，不会因逐物种随机取整溢出几只；kind 已在/超过 cap 时一个都不加
+    （不会反向把人口减到 cap），也不能让每个物种各自顶满一份 cap。"""
+    micro = [x for x in species if x["kind"] == "微生物" and x["pop"] > 0]
+    if not micro: return None
+    micro.sort(key=lambda x: -x["pop"])
+    top, p0 = micro[0], micro[0]["pop"]
+    cap = kind_cap(e, "微生物")
+    room = int(max(0, math.floor(cap) - sum(x["pop"] for x in micro)))   # 剩余整数空间
+    want = [(x, x["pop"] * rng.uniform(0.15, 0.25)) for x in micro]
+    tot_want = sum(w for _x, w in want)
+    scale = 1.0 if tot_want <= room else room / tot_want
+    given = 0
+    for x, w in want:
+        if given >= room: break
+        add = min(stoch_round(w * scale, rng), room - given)            # 逐株取整，且累计不超过剩余空间
+        x["pop"] += add; given += add
+    return top, p0
+
+
 def milestone(s, key, ev, icon, who, text):
     if key in s["milestones"]:
         return False
     s["milestones"].append(key)
-    ev.insert(0, (icon, who, "【里程碑】" + text))
+    ev.insert(0, event(icon, who, "【里程碑】" + text, RANK_MILESTONE, "milestone"))
     return True
+
+
+def spawn(s, rng, kind, pop, parent, key, ev, icon, text, again=None):
+    """新物种诞生：第一次 → 里程碑（rank 3）；
+    该里程碑已经存在（这条谱系灭绝后又演化回来）→ 发一条 rank 2 的诞生事件，日报里看得见，首次里程碑不被覆盖。"""
+    sp = add_species(s, rng, kind, pop, parent)
+    if milestone(s, key, ev, icon, sp["name"], text):
+        return sp
+    ev.append(event(icon, sp["name"],
+                    again or f"{kind}的谱系又演化回来了：{s['world']}上重新出现了这一门类的小生命。",
+                    RANK_EVENT, "birth"))
+    return sp
 
 
 def simulate(s, rng):
@@ -120,16 +242,15 @@ def simulate(s, rng):
             e["ice"] = 0; s["ft_cycles"] = s.get("ft_cycles", 0) + 1
             o0 = e["organics"]; e["organics"] = clamp(o0 + rng.randint(4, 8), 0, 100)
             first = "这是豆星第一次冻融。" if s["ft_cycles"] == 1 else ""
-            micro = sorted([x for x in s["species"] if x["kind"] == "微生物" and x["pop"] > 0], key=lambda x: -x["pop"])
-            if micro:
-                cap = max(5, e["ocean"] * 100 * KINDS["微生物"][3]); top = micro[0]; p0 = top["pop"]
-                for sp in micro: sp["pop"] = max(sp["pop"], int(min(cap, sp["pop"] * (1 + rng.uniform(0.15, 0.25)))))
+            boost = freeze_thaw_boost(e, s["species"], rng)
+            if boost:
+                top, p0 = boost
                 grow = f"数量从 {p0} 涨到 {top['pop']}" if top["pop"] > p0 else f"可浅海已经挤满了，数量稳在 {p0} 左右"
                 text = f"天回暖，冰慢慢化开。冰缝里浓缩的分子被一个个细胞大小的小泡包住，{top['name']}趁机吃饱，{grow}。" + (f"（有机物 {o0}→{e['organics']}）" if e["organics"] > o0 else "")
             else:
                 s["ft_boost_until"] = d + 7
                 text = f"冰化开后，浓缩的分子被细胞大小的小泡包住，有些小泡里第一次开始合成新分子。" + (f"（有机物 {o0}→{e['organics']}）" if e["organics"] > o0 else "")
-            ev.append(("🧊", "解冻", first + text))
+            ev.append(event("🧊", "解冻", first + text, RANK_EVENT if first else RANK_ROUTINE, "first" if first else "major"))
 
     if e["ocean"] > 20 and not e["ice"]:       # 冰封期间有机物不再增加
         e["organics"] = clamp(e["organics"] + (3 if lightning else 1) + (1 if e["volcano"] > 20 else 0), 0, 100)
@@ -165,57 +286,52 @@ def simulate(s, rng):
     if e["ocean"] >= 3: milestone(s, "sea", ev, "🌊", "原始海洋", "低洼处积起了第一汪海水。") and s.update(era=max(s["era"], 2))
     if e["organics"] >= 20: milestone(s, "soup", ev, "🫧", "浅海", "有机分子越来越浓，海水变成了一锅“原始汤”。") and s.update(era=max(s["era"], 3))
     if e["organics"] >= 40 and s.get("proto_cells", 0) and not has(s, "微生物") and rng.random() < (0.36 if d <= s.get("ft_boost_until", -1) else 0.18):
-        sp = add_species(s, rng, "微生物", 10)
-        milestone(s, "life", ev, "🦠", sp["name"], "在火山热泉边，第一个会自我复制的小泡泡出现了。豆星有生命了。")
+        sp = spawn(s, rng, "微生物", 10, None, "life", ev, "🦠",
+                   "在火山热泉边，第一个会自我复制的小泡泡出现了。豆星有生命了。",
+                   "上一支微生物全灭了，热泉边又从浓缩的有机汤里凑出一批会自我复制的小泡泡。生命回来了。")
         s["era"] = max(s["era"], 4)
     if has(s, "微生物") and not has(s, "藻类") and d - next(x["born"] for x in s["species"] if x["kind"] == "微生物") > 15 and rng.random() < 0.05:
-        sp = add_species(s, rng, "藻类", 20, "微生物")
-        milestone(s, "photo", ev, "🟢", sp["name"], "学会了吃阳光，开始往水里吐氧气。")
+        sp = spawn(s, rng, "藻类", 20, "微生物", "photo", ev, "🟢",
+                   "学会了吃阳光，开始往水里吐氧气。",
+                   "灭绝之后，微生物里又有一支学会了吃阳光，重新开始吐氧气。")
         s["era"] = max(s["era"], 5)
     if e["oxygen"] >= 15 and not has(s, "软体") and rng.random() < 0.04:
-        sp = add_species(s, rng, "软体", 5, "藻类")
-        milestone(s, "multi", ev, "🪼", sp["name"], "几个细胞决定抱在一起过日子，第一种多细胞生物诞生。")
+        sp = spawn(s, rng, "软体", 5, "藻类", "multi", ev, "🪼",
+                   "几个细胞决定抱在一起过日子，第一种多细胞生物诞生。",
+                   "又一堆细胞抱在一起过日子，多细胞的身体重新出现在海里。")
         s["era"] = max(s["era"], 6)
     if e["oxygen"] >= 25 and has(s, "藻类") and not has(s, "苔藓") and rng.random() < 0.04:
-        sp = add_species(s, rng, "苔藓", 10, "藻类")
-        milestone(s, "land", ev, "🌿", sp["name"], "爬上了潮湿的岸边石头，陆地第一次变绿。")
+        sp = spawn(s, rng, "苔藓", 10, "藻类", "land", ev, "🌿",
+                   "爬上了潮湿的岸边石头，陆地第一次变绿。",
+                   "岸边又爬上了新的苔藓，陆地重新绿起来。")
         s["era"] = max(s["era"], 7)
     if has(s, "苔藓") and not has(s, "真菌") and rng.random() < 0.05:
-        sp = add_species(s, rng, "真菌", 8, "微生物")
-        milestone(s, "fungi", ev, "🍄", sp["name"], "在苔藓底下织出白色细丝，开始把岩石变成土。")
+        sp = spawn(s, rng, "真菌", 8, "微生物", "fungi", ev, "🍄",
+                   "在苔藓底下织出白色细丝，开始把岩石变成土。",
+                   "苔藓底下又织出白色细丝，真菌重新回来分解落叶。")
     if has(s, "软体") and e["oxygen"] >= 30 and not has(s, "鱼") and rng.random() < 0.03:
-        sp = add_species(s, rng, "鱼", 4, "软体")
-        milestone(s, "fish", ev, "🐟", sp["name"], "长出了一根硬硬的脊梁，在浅海里游得飞快。")
+        sp = spawn(s, rng, "鱼", 4, "软体", "fish", ev, "🐟",
+                   "长出了一根硬硬的脊梁，在浅海里游得飞快。",
+                   "海里又演化出带脊梁的鱼，浅滩重新有鱼群游过。")
     if has(s, "苔藓") and has(s, "真菌") and e["oxygen"] >= 35 and not has(s, "植物") and rng.random() < 0.03:
-        sp = add_species(s, rng, "植物", 3, "苔藓")
-        milestone(s, "tree", ev, "🌳", sp["name"], "第一棵站起来的植物，高度大约一根手指。")
+        sp = spawn(s, rng, "植物", 3, "苔藓", "tree", ev, "🌳",
+                   "第一棵站起来的植物，高度大约一根手指。",
+                   "陆地上又站起了新的植物，虽然还是只有一根手指高。")
         s["era"] = max(s["era"], 8)
     if has(s, "植物") and e["oxygen"] >= 40 and not has(s, "虫") and rng.random() < 0.03:
-        sp = add_species(s, rng, "虫", 6, "软体")
-        milestone(s, "bug", ev, "🐛", sp["name"], "从水边爬上陆地，啃了第一口叶子。")
+        sp = spawn(s, rng, "虫", 6, "软体", "bug", ev, "🐛",
+                   "从水边爬上陆地，啃了第一口叶子。",
+                   "又有一批小虫从水边爬上陆地，重新开始啃叶子。")
     if has(s, "虫") and has(s, "鱼") and e["oxygen"] >= 45 and not has(s, "小兽") and rng.random() < 0.02:
-        sp = add_species(s, rng, "小兽", 2, "鱼")
-        milestone(s, "beast", ev, "🐇", sp["name"], "毛茸茸、会呼吸空气、会照顾宝宝。豆星迎来第一种小兽。")
+        sp = spawn(s, rng, "小兽", 2, "鱼", "beast", ev, "🐇",
+                   "毛茸茸、会呼吸空气、会照顾宝宝。豆星迎来第一种小兽。",
+                   "毛茸茸的小兽又一次演化出来，在草坡上重新安了家。")
         s["era"] = max(s["era"], 9)
 
     # ---------- 种群 ----------
-    cap_sea = e["ocean"] * 100
-    cap_land = (e["oxygen"] * 30) if e["oxygen"] > 20 else 0
-    for sp in s["species"]:
-        if sp["pop"] <= 0: continue
-        icon, hab, r, k = KINDS[sp["kind"]]
-        cap = max(5, (cap_sea if hab == "海" else cap_land) * k)
-        n = sp["pop"]
-        tr = sp.get("traits", {})
-        fit = 0.75 + 0.5 * (tr.get("耐热", 0.5) if e["temp"] > 50 else 1 - tr.get("耐热", 0.5))
-        fit *= 0.75 + 0.5 * (tr.get("耐旱", 0.5) if e["ocean"] < 20 else 1 - tr.get("耐旱", 0.5))
-        growth = r * (0.7 + tr.get("繁殖", 0.5) * 0.6) * fit
-        if e.get("ice") and hab == "海": growth *= 0.5          # 冰下太冷，长得慢
-        n = n + growth * n * (1 - n / cap) + rng.gauss(0, n * 0.05)
-        sp["pop"] = max(0, int(n))
-        if sp["pop"] == 0:
-            s["extinct"] += 1
-            ev.append(("🪦", sp["name"], "最后一个个体也没了，这个物种灭绝了。"))
+    for sp in pop_step(e, s["species"], bool(e.get("ice")), rng):
+        s["extinct"] += 1
+        ev.append(event("🪦", sp["name"], "最后一个个体也没了，这个物种灭绝了。", RANK_EVENT, "extinct"))
     photo = sum(x["pop"] for x in s["species"] if x["kind"] in ("藻类", "苔藓", "植物") and x["pop"] > 0)
     o2 = photo / 20000
     # ---------- 海洋生锈：氧气先被海里的溶解铁吃掉 ----------
@@ -287,8 +403,8 @@ def simulate(s, rng):
         ev.append(("🌙", "小月亮", ["新月", "蛾眉月", "上弦月", "盈凸月", "满月", "亏凸月", "下弦月", "残月"][e["moon"]] + "，静静看着下面。"))
     if len(ev) < 3:
         ev.append(("💨", "风", "卷起一阵灰尘，从一边的平原吹到另一边。"))
-    # 里程碑优先，最多 6 条
-    ev = ev[:6]
+    # 截断交给日报层（merge_events + PER_ISSUE），这里【不能】截：simulate 尾部按位置砍到 6 条会把排在后面的
+    # 里程碑/诞生/灭绝直接丢掉，而日报层根本看不见它们。
     return season, ev
 
 
@@ -326,9 +442,9 @@ def stroma_step(s, d, season, algae, iced, ev, rust=0):
     if len(st) < ST_SITES and xr.random() < 0.12:
         site = _st_new(len(st)); site["born"] = d; st.append(site)
         if len(st) == 1:
-            ev.append(("🪸", "叠层石", "浅滩上，藻类和细菌织成的黏糊糊菌席开始把落下的泥沙粘住，又在自己身上析出一层薄薄的矿物。这是豆星第一块叠层石的起点。"))
+            ev.append(event("🪸", "叠层石", "浅滩上，藻类和细菌织成的黏糊糊菌席开始把落下的泥沙粘住，又在自己身上析出一层薄薄的矿物。这是豆星第一块叠层石的起点。", RANK_EVENT, "first"))
         if len({x.get("kind") for x in st}) == 2 and len(st) == 2:
-            ev.append(("🦠", "两种菌席", "浅滩上的菌席分成了两派：一种是细丝缠成的，会往有光的高处爬；另一种是一粒粒小球挤成的疱疱，到处冒头。它们堆出来的石头长得不一样。"))
+            ev.append(event("🦠", "两种菌席", "浅滩上的菌席分成了两派：一种是细丝缠成的，会往有光的高处爬；另一种是一粒粒小球挤成的疱疱，到处冒头。它们堆出来的石头长得不一样。", RANK_EVENT, "first"))
     if iced:
         return                                           # 冰封期间不长
     rainy = any(x[0] == "🌧️" for x in ev)
@@ -565,14 +681,11 @@ MAX_MILESTONE = 1 # 一期最多一个里程碑，让每个里程碑都有自己
 PER_ISSUE = 6     # 一期最多展示的事件条数
 
 
-def classify(ev):
-    """事件重要性：3 里程碑，2 物种诞生/灭绝，1 日常"""
-    icon, who, text = ev
-    if text.startswith("【里程碑】"): return 3
-    if icon == "🪦" or "成了一个新物种" in text: return 2
-    if icon == "🧊" and "第一次冻融" in text: return 2
-    if icon == "🪸" and "第一块叠层石" in text: return 2
-    return 1
+def classify(x):
+    """事件重要性：3 里程碑，2 物种诞生/灭绝等大事，1 日常。
+    只看事件自带的结构化字段（rank/kind），不再匹配文案——改文案不会改变分级。
+    兼容旧存档：dict 事件优先读 rank，其次 kind；历史上没有 rank 的老 dict 视为日常。"""
+    return ev_rank(x)
 
 
 def day_score(before, after, ev):
@@ -585,19 +698,25 @@ def day_score(before, after, ev):
 
 
 def merge_events(days):
-    """days: [(day, [ev...])] → 带 day/rank 的事件列表；日常事件按 (图标, 主角) 合并计数"""
+    """days: [(day, [ev...])] → 带 day/rank 的事件列表；日常事件按 (图标, 主角) 合并计数。
+    结构化事件 (icon, who, what, rank, kind)、遗留 3 元组与旧 dict 都能吃；不丢任何 rank ≥ 2 的事件，截断留给调用方。"""
     out, routine = [], {}
     for d, evs in days:
         for ev in evs:
-            r = classify(ev)
-            if r >= 2:
-                out.append({"icon": ev[0], "who": ev[1], "what": ev[2], "day": d, "rank": r})
+            r = ev_rank(ev)
+            if isinstance(ev, dict):
+                icon, who, what = ev["icon"], ev["who"], ev["what"]
             else:
-                k = (ev[0], ev[1] if ev[1] not in ("雨", "第一场雨") else "雨")
+                icon, who, what = ev[0], ev[1], ev[2]
+            kind = ev_kind(ev)
+            if r >= 2:
+                out.append({"icon": icon, "who": who, "what": what, "day": d, "rank": r, "kind": kind})
+            else:
+                k = (icon, who if who not in ("雨", "第一场雨") else "雨")
                 if k in routine:
-                    routine[k]["n"] += 1; routine[k]["what"] = ev[2]; routine[k]["day"] = d
+                    routine[k]["n"] += 1; routine[k]["what"] = what; routine[k]["day"] = d
                 else:
-                    routine[k] = {"icon": ev[0], "who": ev[1], "what": ev[2], "day": d, "rank": 1, "n": 1}
+                    routine[k] = {"icon": icon, "who": who, "what": what, "day": d, "rank": 1, "kind": kind, "n": 1}
     for x in routine.values():
         n = x.pop("n")
         if n > 1:
@@ -622,6 +741,9 @@ def main():
         print(f"今天（{bj_today}）已经推演过了，跳过。设置 FORCE=1 可强制推演。")
         return
     s["last_date"] = bj_today
+    # 规则版本标记：v2 首次推演生效。旧存档（无此字段）直接升级到 v2 继续演，历史 log/backlog 不回溯重算。
+    # 有意的升级：v2 改变了主随机序列的消费方式（种群步长等），与 v1 的逐日随机数不再逐位一致。
+    s["rules_version"] = RULES_VERSION
     s["issue"] = s.get("issue", s["day"]) + 1
     backlog = s.get("backlog", [])
     trend = {}
@@ -631,8 +753,8 @@ def main():
         part = s.get("backlog_part", 0) + 1
         events, rest, nm = [], [], 0
         for x in backlog:
-            if len(events) < MAX_BIG and (x["rank"] < 3 or nm < MAX_MILESTONE):
-                events.append(x); nm += x["rank"] == 3
+            if len(events) < MAX_BIG and (x.get("rank", 1) < 3 or nm < MAX_MILESTONE):
+                events.append(x); nm += x.get("rank", 1) == 3
             else:
                 rest.append(x)
         s["backlog"] = rest
@@ -678,12 +800,17 @@ def main():
         draw_planet(s, season, os.path.join(DATA, "planet.png"))
 
     for x in events:
-        x.pop("rank", None)
+        x.pop("rank", None); x.pop("kind", None)   # 展示层只要 icon/who/what/day/tag 契约
         if day_from != day_to: x["tag"] = f"第{x['day']}天"
     e = s["env"]
     alive = [x for x in s["species"] if x["pop"] > 0]
     wr = random.Random(s["seed"] + s["issue"])
-    weather = "岩浆风暴" if e["temp"] > 600 else "冰" if e.get("ice") or any(x["icon"] == "❄️" for x in events) else ("雨" if any(x["icon"] == "🌧️" for x in events) else wr.choice(["晴", "多云", "大风", "薄雾"]))
+    # 天气只看推演结束时的最终环境值，不从日报事件（可能被截断/合并）反推。
+    # 已知症状修复：之前 today 显示“晴”，但 env.rain=3（暴雨被 merge/截断挤掉了）。
+    weather = ("岩浆风暴" if e["temp"] > 600 else
+               "冰" if e.get("ice") else
+               "雨" if e.get("rain", 0) >= 1 else
+               wr.choice(["晴", "多云", "大风", "薄雾"]))
     today = {
         "world": s["world"], "day": s["day"], "day_from": day_from, "day_to": day_to, "day_label": label,
         "issue": s["issue"], "sim_days": sims, "more_tomorrow": bool(s.get("backlog")),
@@ -692,7 +819,9 @@ def main():
         "stromatolites": [dict(stroma_info(x), id=x["id"], kind=x.get("kind", ST_KIND_OF[x["id"] % 4]), cols=x["cols"]) for x in s.get("stroma", [])], "rain": (e.get("rain") or 2) if weather == "雨" else 0,
         "image": "https://raw.githubusercontent.com/{repo}/main/data/planet.png".format(repo=os.environ.get("GITHUB_REPOSITORY", "vitawell/tiny-planet")) + f"?d={s['day']}",
         "stats": stats_of(s), "trend": trend,
-        "species": [{"name": x["name"], "kind": x["kind"], "pop": x["pop"]} for x in sorted(alive, key=lambda x: -x["pop"])[:8]],
+        # 全部现存物种（按数量降序）。之前 [:8] 截断让高营养级（鱼/植物/小兽）被微生物挤出列表，
+        # play.html 把这份列表当成“全部现存物种”，导致活着的物种在前端不可见。
+        "species": [{"name": x["name"], "kind": x["kind"], "pop": x["pop"]} for x in sorted(alive, key=lambda x: -x["pop"])],
         "events": events,
     }
     s["log"] = (s["log"] + [{"day": s["day"], "label": label, "events": events}])[-30:]
