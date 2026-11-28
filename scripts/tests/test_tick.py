@@ -211,7 +211,8 @@ class TickIntegrationTest(unittest.TestCase):
 
     # -------------------------------------------------------------------- 用例
     def test_first_tick_pushes_exactly_one_commit_with_three_data_files(self):
-        result = self.run_tick()
+        fake_secret = "ghp_FAKE_SECRET_DO_NOT_LEAK_987654"
+        result = self.run_tick(GITHUB_TOKEN=fake_secret)
         self.assertEqual(result.returncode, 0, result.stderr)
 
         head = self.remote_head()
@@ -231,7 +232,7 @@ class TickIntegrationTest(unittest.TestCase):
         self.assertIn("notes.txt",
                       self.git("ls-tree", "--name-only", "main", cwd=self.bare).stdout)
         self.assert_root_untouched()
-        self.assertNotIn("GITHUB_TOKEN", result.stdout + result.stderr)
+        self.assertNotIn(fake_secret, result.stdout + result.stderr)
 
     def test_same_day_rerun_is_idempotent(self):
         self.assertEqual(self.run_tick().returncode, 0)
