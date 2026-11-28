@@ -11,6 +11,7 @@ canvas{display:block}
 #hud b{font-size:15px}
 #card{position:fixed;left:50%;top:18%;transform:translateX(-50%);width:min(86vw,420px);background:rgba(20,28,52,.92);border-radius:14px;padding:12px 14px;font-size:15px;line-height:1.55;display:none;pointer-events:none}
 #card .tag{font-size:12px;color:#8fb4ff}
+#flyhud{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.45);padding:4px 12px;border-radius:999px;font-size:13px;display:none;pointer-events:none;white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:170px;transform:translateX(-50%);background:rgba(0,0,0,.55);padding:6px 12px;border-radius:14px;font-size:13px;line-height:1.45;display:none;white-space:normal;width:max-content;max-width:min(420px,calc(100vw - 32px));box-sizing:border-box;text-align:center;overflow-wrap:anywhere}
 #joy{position:fixed;left:24px;bottom:28px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.25)}
 #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
@@ -101,18 +102,18 @@ role.jump = role.jump || 5;   // 不再按物种限制活动范围：谁都能�
 const upBtn = document.getElementById("up"), downBtn = document.getElementById("down"); let btnState = "";
 
 // ---------- 地形：固定种子，每天只变海面和颜色 ----------
-const N = 48;
+const N = 96, SC = N / 48;   // 岛的边长（格）；SC 是相对原来 48 格的放大倍数
 function hash(x, z) { let h = (x * 374761393 + z * 668265263 + 20261007) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function smooth(t) { return t * t * (3 - 2 * t); }
 function vnoise(x, z) { const xi = Math.floor(x), zi = Math.floor(z), xf = smooth(x - xi), zf = smooth(z - zi);
   const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), e = hash(xi + 1, zi + 1);
   return a + (b - a) * xf + (c - a) * zf + (a - b - c + e) * xf * zf; }
-const VX = 34, VZ = 14, CX = 12, CZ = 32; // 火山、陨石坑
+const VX = 68, VZ = 28, CX = 24, CZ = 64; // 火山、陨石坑（按 96 格摆放）
 const H = [];
 for (let x = 0; x < N; x++) { H[x] = [];
   for (let z = 0; z < N; z++) {
-    let h = 3 + vnoise(x / 9, z / 9) * 7 + vnoise(x / 4, z / 4) * 2.5;
-    const dx = x - N / 2, dz = z - N / 2; h -= Math.max(0, Math.hypot(dx, dz) - 18) * 0.6; // 边缘下沉成岛
+    let h = 3 + vnoise(x / 13, z / 13) * 8 + vnoise(x / 5, z / 5) * 2.5 + vnoise(x / 30 + 5, z / 30) * 4 - 1.5;   // 大起伏 + 中小丘
+    const dx = x - N / 2, dz = z - N / 2; h -= Math.max(0, Math.hypot(dx, dz) - 18 * SC) * 0.6; // 边缘下沉成岛
     const dv = Math.hypot(x - VX, z - VZ); if (dv < 7) h += (7 - dv) * 1.9; if (dv < 1.6) h -= 3; // 火山口
     const dc = Math.hypot(x - CX, z - CZ); if (dc < 3.2) h -= (3.2 - dc) * 1.1; else if (dc < 4.2) h += 0.8;
     H[x][z] = Math.max(1, Math.round(h));
@@ -148,8 +149,8 @@ for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
 }
 // 墓碑、植物、石块装饰
 const deco = [];
-if (events.some(e => e.icon === "🪦")) deco.push([20, 20, 0x9a9aa6, 0.6, 1.0, 0.25]);
-if (kindsAlive.has("植物")) for (let i = 0; i < 40; i++) { const x = 4 + Math.floor(hash(i, 99) * 40), z = 4 + Math.floor(hash(99, i) * 40); if (H[x][z] > seaLevel + 1) { deco.push([x, z, 0x2f7d45, 0.9, 1.6, 0.9, 1.6]); } }
+if (events.some(e => e.icon === "🪦")) deco.push([40, 40, 0x9a9aa6, 0.6, 1.0, 0.25]);
+if (kindsAlive.has("植物")) for (let i = 0; i < 40 * SC * SC; i++) { const x = 4 + Math.floor(hash(i, 99) * (N - 8)), z = 4 + Math.floor(hash(99, i) * (N - 8)); if (H[x][z] > seaLevel + 1) { deco.push([x, z, 0x2f7d45, 0.9, 1.6, 0.9, 1.6]); } }
 
 // ---------- 场景 ----------
 let renderer;
@@ -161,9 +162,9 @@ const scene = new THREE.Scene();
 const sky = C(0x8fb4ff, 0xd07a50, Math.max(hot, 1 - oxy / 25 > 0 ? 0.35 * (1 - oxy / 25) : 0)).lerp(new THREE.Color(0x8a93a3), raining ? RAIN.gray : 0).lerp(new THREE.Color(0xdfe8f2), icy ? 0.45 : 0);
 scene.background = sky; scene.fog = new THREE.Fog(sky, 22, raining ? RAIN.far : icy ? 60 : 75);
 const deepCol = new THREE.Color(kindsAlive.has("藻类") ? 0x1f6e5c : 0x1b5d9e).lerp(new THREE.Color(0x6a2a1a), Math.min(1, d.rust || 0) * 0.7), skyFog = { near: 22, far: raining ? RAIN.far : icy ? 60 : 75 };
-const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 200);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 420);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x554433, 0.9));
-const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(20, 40, 10); scene.add(sun);
+const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(N * 0.4, 40, N * 0.2); scene.add(sun);
 const box = new THREE.BoxGeometry(1, 1, 1);
 // 像素纹理：16×16 灰度噪点，最近邻放大，方块感更像《我的世界》
 function pixTex(seed, lo) { const c = document.createElement("canvas"); c.width = c.height = 16; const g = c.getContext("2d");
@@ -219,7 +220,7 @@ if (seaLevel) {
 // 方块云：慢慢飘，下雨时更多更灰
 const clouds = new THREE.Group(); scene.add(clouds);
 { const cm = new THREE.MeshLambertMaterial({ color: raining ? 0x8d929c : icy ? 0xd8dde4 : 0xffffff, transparent: true, opacity: raining || icy ? 0.92 : 0.85 });
-  for (let i = 0; i < (raining || icy ? 26 : 12); i++) { const w = 3 + Math.floor(hash(i, 5) * 6), dd = 2 + Math.floor(hash(5, i) * 5);
+  for (let i = 0; i < (raining || icy ? 26 : 12) * SC * SC; i++) { const w = 3 + Math.floor(hash(i, 5) * 6), dd = 2 + Math.floor(hash(5, i) * 5);
     const c = new THREE.Mesh(new THREE.BoxGeometry(w, 1, dd), cm); c.position.set(hash(i, 9) * N * 1.6 - N * 0.3, 22 + hash(9, i) * 3, hash(i, 13) * N * 1.6 - N * 0.3); clouds.add(c); } }
 // 月亮
 // 按月相画亮面：先画暗盘，再画亮的半边，最后用椭圆补上/挖掉明暗交界
@@ -366,7 +367,7 @@ function spot(ev, i) {
       const wet = seaLevel && H[x][z] <= seaLevel; if ((role.mode === "swim") === !!wet || (!seaLevel)) return [x, z]; } return [N / 2, N / 2]; };
   if (ev.icon === "🌋") return [VX + 2, VZ + 2];
   if (ev.icon === "☄️") return [MX, MZ];
-  if (ev.icon === "🪦") return [20, 20];
+  if (ev.icon === "🪦") return [40, 40];
   if (sp && vents.length) return [vents[0][0] + 1, vents[0][1] + 1];   // 物种事件放在热泉边
   if (sp && role.mode === "swim") return pick(5);
   return pick(ev.icon.codePointAt(0) % 97);
@@ -453,7 +454,7 @@ function drawMap() { mg.drawImage(mapBase, 0, 0);
 // 开场俯冲（借鉴 homecraft rig.js）：先在高空看整颗星，点“出发”后一路俯冲进角色眼里；点屏幕可跳过
 let started = false, intro = null;
 const INTRO_T = 3.4, introFrom = new THREE.Vector3(), introQ = new THREE.Quaternion();
-function overview(t) { const a = t * 0.08; camera.position.set(N / 2 + Math.sin(a) * N * 0.75, Math.max(38, N * 0.7), N / 2 + Math.cos(a) * N * 0.75); camera.lookAt(N / 2, 4, N / 2); }
+function overview(t) { const a = t * 0.08; camera.position.set(N / 2 + Math.sin(a) * N * 0.7, N * 0.6, N / 2 + Math.cos(a) * N * 0.7); camera.lookAt(N / 2, 4, N / 2); }
 goBtn.onclick = () => { document.getElementById("start").style.display = "none"; started = true;
   introFrom.copy(camera.position); introQ.copy(camera.quaternion); intro = { t: 0 }; };
 function skipIntro() { if (intro) intro.t = INTRO_T; }
@@ -464,7 +465,7 @@ function introCam(dt) {
   const to = camera.position.clone(); eyeQ.copy(camera.quaternion);
   camera.position.lerpVectors(introFrom, to, e); camera.position.y += Math.sin(u * Math.PI) * 6;   // 先抬一点再扎下去
   camera.quaternion.slerpQuaternions(introQ, eyeQ, THREE.MathUtils.smoothstep(u, 0.15, 0.95));
-  if (!seaLevel || camera.position.y >= seaLevel + 0.85) { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = skyFog.near; scene.fog.far = Math.max(skyFog.far, 140 * (1 - e)); }
+  if (!seaLevel || camera.position.y >= seaLevel + 0.85) { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = skyFog.near; scene.fog.far = Math.max(skyFog.far, N * 2.4 * (1 - e)); }
   if (u >= 1) intro = null;
 }
 addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
@@ -568,26 +569,62 @@ const viewBtn = document.getElementById("view");
 function toggleView(on = !thirdP) { thirdP = on; viewBtn.textContent = on ? "第三" : "第一"; say(on ? "第三人称：看得见自己（滚轮/双指远近）" : "第一人称"); }
 const camTgt = new THREE.Vector3(), camDir = new THREE.Vector3();
 function placeCamera(dt, bob) {
-  camera.rotation.set(pitch, yaw, 0, "YXZ");
+  if (flying) { pitch += (fl.pitch * 0.6 - 0.18 - pitch) * Math.min(1, dt * 3); camera.rotation.set(pitch, yaw, -fl.roll * 0.45, "YXZ"); }   // 追尾镜头，跟着机身倾斜
+  else camera.rotation.set(pitch, yaw, 0, "YXZ");
   if (!thirdP) { avatar.visible = false; camera.position.set(px, py + role.eye + bob, pz); return; }
   avatar.visible = true; camTgt.set(px, py + role.eye * 0.9 + 0.3, pz);
   camera.getWorldDirection(camDir);
   let d = 0.4;   // 镜头往后退，碰到地形就停在前面，免得钻进山里
   for (; d < camDist; d += 0.2) { const x = camTgt.x - camDir.x * d, y = camTgt.y - camDir.y * d, z = camTgt.z - camDir.z * d;
     if (y < ground(Math.min(N - 1, Math.max(0, x)), Math.min(N - 1, Math.max(0, z))) + 0.25) break; }
+  if (flying) d = Math.max(d, Math.min(camDist + 2, 3.5 + fl.v * 0.08));   // 飞行时镜头拉远一点，速度越快越远
   camNow = d < camNow ? d : camNow + (d - camNow) * Math.min(1, dt * 4);
   camera.position.copy(camTgt).addScaledVector(camDir, -camNow);
 }
 let faceYaw = yaw;
 function poseAvatar(dt, moving, swimming) {
   if (moving) faceYaw += (((yaw - faceYaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 10);
-  avatar.position.set(px, py, pz); avatar.rotation.set(flying ? -0.35 : swimming ? -0.2 : 0, faceYaw, 0);
+  avatar.position.set(px, py, pz); if (flying) { faceYaw = yaw; avatar.rotation.set(fl.pitch - 0.25, faceYaw, -fl.roll, "YXZ"); } else avatar.rotation.set(swimming ? -0.2 : 0, faceYaw, 0, "YXZ");
   avatar.userData.legs.forEach((l, i) => l.rotation.x = moving ? Math.sin(tAll * 12 + i * Math.PI) * 0.6 : 0);
 }
-// 飞行模式：不受重力，跳/升往上，潜/降往下；碰地形就贴着飞过去
+// 飞行模式（像飞行游戏）：一直往前飞，压坡度转弯，抬头爬升、低头俯冲；油门控制速度。
+//   电脑：W/S 油门，A/D 或 ←/→ 压坡度转弯，↑/↓ 抬头/低头（空格/Shift 也是抬头/低头）
+//   手机：摇杆左右转弯、上下抬头低头，右侧“加速/减速”按钮是油门
+// 爬升会掉速、俯冲会加速；贴地太近会自动拉起；飞出岛外太远会自动掉头。
 let flying = false; const flyBtn = document.getElementById("fly");
-function toggleFly(on = !flying) { flying = on; flyBtn.classList.toggle("on", on); vy = 0; if (on) py += 0.6; say(on ? "飞行模式：按“升/降”（空格/Shift）上下" : "飞行模式关闭"); }
-const FLY_TOP = 48;
+const FLY_TOP = 70, FLY_MIN = 5, FLY_MAX = 26, FLY_EDGE = N * 0.9;
+const fl = { v: 10, thr: 10, roll: 0, pitch: 0, turnBack: 0 };
+const flyHud = document.createElement("div"); flyHud.id = "flyhud"; document.body.appendChild(flyHud);
+function toggleFly(on = !flying) { flying = on; flyBtn.classList.toggle("on", on); vy = 0; flyHud.style.display = on ? "block" : "none";
+  if (on) { py = Math.max(py + 2, ground(px, pz) + 3); fl.v = fl.thr = 10; fl.roll = 0; fl.pitch = 0.25; }
+  else { pitch = Math.max(-0.6, Math.min(0.6, pitch)); px = Math.min(N - 1, Math.max(1, px)); pz = Math.min(N - 1, Math.max(1, pz)); }   // 在岛外降落就落回岸边
+  say(on ? ("ontouchstart" in window ? "起飞！摇杆左右转弯、上下抬头低头，“加速/减速”是油门。再点 🕊️ 降落" : "起飞！A/D 转弯，↑/↓ 抬头低头，W/S 油门。再按 G 降落") : "降落了"); }
+function flyStep(dt, fx, sx, up, down) {
+  const kPitch = (keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0) + (keys.Space ? 1 : 0) - (keys.ShiftLeft ? 1 : 0) - jz;   // 摇杆往上推 = 抬头
+  const kRoll = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + jx;
+  const kThr = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) + (upHeld ? 1 : 0) - (downHeld ? 1 : 0);
+  fl.thr = Math.max(FLY_MIN, Math.min(FLY_MAX, fl.thr + kThr * 9 * dt));
+  // 飞出岛外太远：自动压坡度掉头
+  const ox = px - N / 2, oz = pz - N / 2, far = Math.hypot(ox, oz);
+  let rollIn = Math.max(-1, Math.min(1, kRoll));
+  if (far > FLY_EDGE) { const want = Math.atan2(ox, oz), dyaw = ((want - yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    rollIn = dyaw > 0 ? -1 : 1; if (tAll - fl.turnBack > 4) { fl.turnBack = tAll; say("前面就是豆星的边，掉头回去"); } }
+  fl.roll += (rollIn * 0.95 - fl.roll) * Math.min(1, dt * 3);                     // 松手自动改平
+  fl.pitch += (Math.max(-1, Math.min(1, kPitch)) * 0.7 - fl.pitch) * Math.min(1, dt * 2.2);
+  yaw -= Math.sin(fl.roll) * (1.1 + 6 / fl.v) * dt;                                 // 坡度越大转得越快，慢速时转弯更灵
+  fl.v += ((fl.thr - fl.v) * 0.8 - Math.sin(fl.pitch) * 9) * dt;                   // 爬升掉速、俯冲加速
+  fl.v = Math.max(FLY_MIN * 0.8, Math.min(FLY_MAX * 1.25, fl.v));
+  const cp = Math.cos(fl.pitch);
+  px += -Math.sin(yaw) * cp * fl.v * dt; pz += -Math.cos(yaw) * cp * fl.v * dt; py += Math.sin(fl.pitch) * fl.v * dt;
+  // 贴地/贴水太近就自动拉起，飞不进山里
+  const look = 1.2 + fl.v * 0.25, ax = px - Math.sin(yaw) * look, az = pz - Math.cos(yaw) * look;
+  const floor = Math.max(ground(px, pz), ground(ax, az), seaLevel ? seaLevel + 0.9 : 0) + 0.8;
+  if (py < floor + 1.5 && fl.pitch < 0.35) fl.pitch += (0.35 - fl.pitch) * Math.min(1, dt * 4);
+  if (py < floor) py += (floor - py) * Math.min(1, dt * 10);
+  if (py > FLY_TOP) { py = FLY_TOP; fl.pitch = Math.min(fl.pitch, 0); }
+  px = Math.max(-N * 0.4, Math.min(N * 1.4, px)); pz = Math.max(-N * 0.4, Math.min(N * 1.4, pz));
+  flyHud.textContent = `✈︎ 速度 ${Math.round(fl.v * 10)} · 高度 ${Math.max(0, Math.round((py - (seaLevel || 0)) * 10))}`;
+}
 
 const clock = new THREE.Clock(); let tAll = 0;
 function step(dt) {
@@ -599,7 +636,7 @@ function step(dt) {
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
   let sp = role.speed; const native = role.mode === "swim";
   const inWater = isWater(px, pz) && py < seaLevel + 0.6;
-  if (flying) sp = Math.max(6, sp * 2.2);
+  if (flying) sp = 0;
   else if (inWater && !native) sp *= 0.6;           // 陆上物种也能游，只是慢点
   else if (!inWater && native) sp = Math.max(1.4, sp * 0.8);   // 水里物种也能上岸
   if (raining && !inWater && !flying) sp *= 0.9;
@@ -607,11 +644,7 @@ function step(dt) {
   let nx = px + mv.x * sp * dt, nz = pz + mv.z * sp * dt;
   nx = Math.min(N - 0.5, Math.max(0.5, nx)); nz = Math.min(N - 0.5, Math.max(0.5, nz));
   if (zip) zipping(dt);
-  else if (flying) {
-    const g1 = ground(nx, nz); px = nx; pz = nz; if (g1 + 0.05 > py) py += Math.min(g1 + 0.05 - py, 8 * dt) ; // 迎面是山就抬头飞上去
-    vy = (up ? 5 : 0) - (down ? 5 : 0); py += vy * dt;
-    py = Math.min(FLY_TOP, Math.max(Math.max(ground(px, pz), seaLevel && isWater(px, pz) ? seaLevel - 3 : 0) + 0.05, py));
-  } else if (inWater) {
+  else if (flying) flyStep(dt, fx, sx, up, down); else if (inWater) {
     const g1 = ground(nx, nz); if (g1 <= py + 1.01) { px = nx; pz = nz; if (g1 > py) py = g1; }   // 游到岸边自动爬上去
     vy = (up ? 1.8 : 0) - (down ? 1.8 : 0) + Math.sin(tAll * 2) * 0.05; py += vy * dt;
     if (isWater(px, pz)) { const g = ground(px, pz); py = Math.max(g + 0.05, Math.min(seaLevel + (iceCells.has(Math.floor(px) + "," + Math.floor(pz)) ? 0.5 - role.eye : 0.55), py)); }
@@ -626,19 +659,19 @@ function step(dt) {
   }
   const swimNow = !flying && isWater(px, pz) && py < seaLevel + 0.6;
   const st = flying ? "fly" : swimNow ? "swim" : "walk";
-  if (st !== btnState) { btnState = st; upBtn.textContent = st === "fly" ? "升" : st === "swim" ? "浮" : "跳"; downBtn.textContent = st === "fly" ? "降" : "潜"; downBtn.style.display = st === "walk" ? "none" : "flex"; }
+  if (st !== btnState) { btnState = st; upBtn.textContent = st === "fly" ? "加速" : st === "swim" ? "浮" : "跳"; downBtn.textContent = st === "fly" ? "减速" : "潜"; downBtn.style.display = st === "walk" ? "none" : "flex"; }
   const onLava = lavaCells.has(Math.floor(px) + "," + Math.floor(pz)) && py < ground(px, pz) + 0.2;
   heat.style.opacity = onLava ? (role.heatProof ? 0.35 : 0.8) : (hot > 0.3 && !isWater(px, pz) ? hot * 0.25 : 0);
   if (onLava && !role.heatProof && Math.random() < 0.02) say("好烫！岩浆上别待太久");
   const bob = (st === "walk" && mv.length() > 0.1 && py <= ground(px, pz) + 0.01) ? Math.sin(tAll * 10) * 0.04 : 0;
   poseAvatar(dt, mv.length() > 0.1 || !!zip, st === "swim");
   placeCamera(dt, bob);
-  const fovT = zip && !zip.released && zip.t > 0 ? 86 : 72; if (Math.abs(camera.fov - fovT) > 0.1) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 8); camera.updateProjectionMatrix(); }
+  const fovT = zip && !zip.released && zip.t > 0 ? 86 : flying ? 70 + fl.v * 0.6 : 72; if (Math.abs(camera.fov - fovT) > 0.1) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 8); camera.updateProjectionMatrix(); }
   drawWeb();
   if (webMode && tAll - aimCheck > 0.12) { aimCheck = tAll; const tg = webTarget(innerWidth / 2, innerHeight / 2); aimEl.classList.toggle("ok", !!tg && !tg.bad); }
   const submerged = seaLevel && camera.position.y < seaLevel + 0.85;
   if (submerged) { scene.background = deepCol; scene.fog.color.copy(deepCol); scene.fog.near = 2; scene.fog.far = 26; if (rain) rain.visible = false; if (snow) snow.visible = false; }
-  else { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = skyFog.near; scene.fog.far = skyFog.far; if (rain) rain.visible = true; if (snow) snow.visible = true; }
+  else { scene.background = sky; scene.fog.color.copy(sky); scene.fog.near = flying ? skyFog.near * 2 : skyFog.near; scene.fog.far = flying ? skyFog.far * (raining ? 1.4 : 2.2) : skyFog.far; if (rain) rain.visible = true; if (snow) snow.visible = true; }
   // 标记
   let near = null;
   for (const m of markers) {
@@ -702,7 +735,7 @@ let tPre = 0;
 function stromaNear() { const i = stromas.findIndex(o => Math.hypot(px - o.x - 0.5, pz - o.z - 0.5) < 2.2);
   if (i >= 0 && i !== stromaSaid && stromas[i].info) { const s = stromas[i].info; say(`🪸 叠层石${"①②③④"[s.id] || ""}${s.kind ? "（" + s.kind + "菌席）" : ""}：${s.fabric === "凝块" ? "纹层模糊，一团一团的凝块" : s.layers + " 道纹层"}，像${s.shape}${s.red ? "，夹着 " + s.red + " 道铁锈红纹层" : ""}。奶黄是菌席沉淀，灰褐是泥沙${s.red ? "，鲜红是铁锈胶体" : ""}`); }
   stromaSaid = i; }
-function loop() { const dt = Math.min(0.05, clock.getDelta()); tPre += dt; if (started) { step(dt); introCam(dt); drawMap(); stromaNear(); } else { overview(tPre); scene.fog.far = 160; }
+function loop() { const dt = Math.min(0.05, clock.getDelta()); tPre += dt; if (started) { step(dt); introCam(dt); drawMap(); stromaNear(); } else { overview(tPre); scene.fog.far = N * 2.4; }
   renderer.render(scene, camera); requestAnimationFrame(loop); }
 loop();
 </script>
